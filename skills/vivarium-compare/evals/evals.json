@@ -1,0 +1,14 @@
+{
+  "skill_name": "vivarium-compare",
+  "evals": [
+    {"id": 0, "name": "ani-matrix",
+     "prompt": "Compute pairwise whole-genome ANI across all the genome FASTAs in ~/Desktop/vivarium/tests/data/genomes/ and give me the result as a matrix. Also tell me whether PB002_L5 and S_vesiculosa_M7 are the same species.",
+     "files": ["~/Desktop/vivarium/tests/data/genomes/"]},
+    {"id": 1, "name": "synteny",
+     "prompt": "Align the genome ~/Desktop/vivarium/tests/data/genomes/PB002_L5.fna against ~/Desktop/vivarium/tests/data/genomes/S_vesiculosa_M7.fna and summarize how collinear / syntenic they are.",
+     "files": ["~/Desktop/vivarium/tests/data/genomes/PB002_L5.fna", "~/Desktop/vivarium/tests/data/genomes/S_vesiculosa_M7.fna"]},
+    {"id": 2, "name": "orthology-scaffold",
+     "prompt": "I want the core, accessory, and strain-unique genes (orthogroups) across the four genomes in ~/Desktop/vivarium/tests/data/genomes/. Set up the analysis for me.",
+     "files": ["~/Desktop/vivarium/tests/data/genomes/"]}
+  ]
+}

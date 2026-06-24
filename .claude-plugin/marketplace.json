@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "vivarium",
+  "description": "Local comparative-genomics analysis skills.",
+  "owner": {
+    "name": "Jason-0409-G"
+  },
+  "plugins": [
+    {
+      "name": "vivarium",
+      "description": "Local comparative-genomics analysis workflow: an umbrella orchestrator plus standalone modules for sequence search (BLAST/DIAMOND/HMMER), QC+assembly+annotation, orthology+ANI/AAI+synteny, alignment+tree+selection (dN/dS), and figures. Hybrid execution: light analyses run in the bio_tools conda env, heavy/long jobs are scaffolded as ready-to-run commands. Depends on no other skill.",
+      "author": {
+        "name": "Jason-0409-G"
+      },
+      "category": "productivity",
+      "source": "./"
+    }
+  ]
+}

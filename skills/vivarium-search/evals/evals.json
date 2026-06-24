@@ -1,0 +1,23 @@
+{
+  "skill_name": "vivarium-search",
+  "evals": [
+    {
+      "id": 0,
+      "name": "homolog-search",
+      "prompt": "I've got two protein FASTA files in ~/Desktop/vivarium/tests/data/ : query.faa (3 proteins from a Shewanella strain) and target_proteome.faa (the proteome of a related strain). Find the homolog of each query protein in the target and give me the best hit for each — percent identity, e-value, and query coverage.",
+      "files": ["~/Desktop/vivarium/tests/data/query.faa", "~/Desktop/vivarium/tests/data/target_proteome.faa"]
+    },
+    {
+      "id": 1,
+      "name": "identify-unknown",
+      "prompt": "I pulled this one protein sequence out of an assembly — it's at ~/Desktop/vivarium/tests/data/mystery.faa and I have no idea what it is. Search it against the reference proteome ~/Desktop/vivarium/tests/data/target_proteome.faa and tell me what it most likely is, with the evidence.",
+      "files": ["~/Desktop/vivarium/tests/data/mystery.faa", "~/Desktop/vivarium/tests/data/target_proteome.faa"]
+    },
+    {
+      "id": 2,
+      "name": "no-homolog",
+      "prompt": "Does the proteome at ~/Desktop/vivarium/tests/data/target_proteome.faa contain a homolog of the protein at ~/Desktop/vivarium/tests/data/random.faa ? Search it and tell me.",
+      "files": ["~/Desktop/vivarium/tests/data/random.faa", "~/Desktop/vivarium/tests/data/target_proteome.faa"]
+    }
+  ]
+}

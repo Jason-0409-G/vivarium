@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# skill-creator eval workspaces (agent test outputs — regenerable, large)
+skills/*-workspace/
+
+# agent/test-generated scratch under tests/ (keep only the curated INPUT files:
+#   query/mystery/random/target_proteome/marker_groEL .faa, ani_matrix/cog_counts .tsv, genomes/*.fna)
+tests/data/genomes/*_prokka/
+tests/data/genomes/*_prokka.prokka.log
+tests/data/genomes/*.fna.faa
+tests/data/genomes/comparison_out/
+tests/data/genomes/*_out/
+tests/data/phylo_out/
+tests/data/*_tree_*/
+genome_stats.tsv
+tests/vivarium_run_*/
+_deleted/
+Rplots.pdf
+
+# large raster figure outputs (regenerate from SVG/PDF or the plotters)
+*.tiff
+
+# local installer backups + scratch
+*.bak.*
+*.log
+/tmp/
