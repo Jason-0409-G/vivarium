@@ -63,6 +63,25 @@ cd vivarium
 bash install.sh            # copies skills/ into ~/.claude/skills/
 ```
 
+## Update
+
+This plugin uses **semantic versioning** (the `version` field in `.claude-plugin/plugin.json`). **Users only receive an update when you bump that version**; what changed in each release is in [`CHANGELOG.md`](CHANGELOG.md).
+
+**If installed from the marketplace**
+```
+/plugin marketplace update vivarium     # pull the latest catalog
+/plugin update vivarium@vivarium        # install the new version
+/reload-plugins                         # apply in this session (or restart)
+```
+You can also enable **auto-update** for the `vivarium` marketplace under `/plugin` → Marketplaces.
+
+**If installed via the script**
+```bash
+cd vivarium   # the folder you cloned
+git pull
+bash install.sh
+```
+
 ## Dependencies
 
 Analysis tools must be available in a **`bio_tools` conda environment** (the skills never auto-install; missing tools are reported, not installed):

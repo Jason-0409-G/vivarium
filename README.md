@@ -63,6 +63,25 @@ cd vivarium
 bash install.sh            # 将 skills/ 拷入 ~/.claude/skills/
 ```
 
+## 更新
+
+本插件用**语义化版本号**(`.claude-plugin/plugin.json` 的 `version`)。**只有版本号 bump 时,用户才会收到更新**;每版改了什么见根目录 [`CHANGELOG.md`](CHANGELOG.md)。
+
+**插件市场安装**
+```
+/plugin marketplace update vivarium     # 拉取最新目录
+/plugin update vivarium@vivarium        # 装上新版本
+/reload-plugins                         # 本会话立即生效(或重启)
+```
+也可在 `/plugin` → Marketplaces 里给 `vivarium` 开 **auto-update** 自动更新。
+
+**脚本安装**
+```bash
+cd vivarium   # 之前 clone 的目录
+git pull
+bash install.sh
+```
+
 ## 依赖
 
 分析工具需位于 **`bio_tools` conda 环境**（技能从不自动安装；缺失只提示、不安装）：
