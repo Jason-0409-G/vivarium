@@ -72,7 +72,15 @@ save_pub_r <- function(plot, filename, width_mm = 120, height_mm = 90, dpi = 600
     ragg::agg_tiff(paste0(filename, ".tiff"), width = w, height = h, units = "in", res = dpi, compression = "lzw")
     print(plot); dev.off()
   } else ggsave(paste0(filename, ".tiff"), plot, width = w, height = h, dpi = dpi)
-  cat(sprintf("wrote %s.svg / %s.pdf / %s.tiff (%d dpi, LZW)\n", filename, filename, filename, dpi))
+  # Provenance footer (same shape the vivarium shell runners print): a figure with no
+  # version stamp is unreproducible later when you write the methods. cmd/args are globals.
+  svg_v  <- if (requireNamespace("svglite", quietly = TRUE)) as.character(packageVersion("svglite")) else "absent"
+  ragg_v <- if (requireNamespace("ragg",    quietly = TRUE)) as.character(packageVersion("ragg"))    else "absent"
+  cat(sprintf("=== vivarium-report %s done ===\n", cmd))
+  cat(sprintf("tool:    ggplot2 %s (svglite %s, ragg %s, %s)\n",
+              as.character(packageVersion("ggplot2")), svg_v, ragg_v, R.version.string))
+  cat(sprintf("command: plot.R %s\n", paste(args, collapse = " ")))
+  cat(sprintf("out:     %s.svg / %s.pdf / %s.tiff (%d dpi, LZW)\n", filename, filename, filename, dpi))
 }
 
 if (cmd == "heatmap") {

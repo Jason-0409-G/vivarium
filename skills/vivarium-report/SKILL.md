@@ -8,7 +8,9 @@ description: >-
   like "plot the ANI matrix", "make a heatmap of", "bar chart of CAZy/COG categories", "figure for the paper", "make this
   publication quality", "出个图", "画个热图/柱状图", "把这个表画成图", "出版级/Nature 风格的图", "ANI 热图". Produces
   editable SVG + PDF + TIFF (600 dpi) with Nature-style conventions (Arial, small fonts, editable text, restrained
-  palette). Part of the vivarium comparative-genomics skill set. NOT for interactive/web plots (plotly) or Illustrator-first layout.
+  palette). This skill plots results that already exist — to *compute* ANI/AAI use vivarium-compare, to *build* a tree
+  use vivarium-phylo, to *run* a search use vivarium-search; this one turns their output into the figure. Part of the
+  vivarium comparative-genomics skill set. NOT for interactive/web plots (plotly) or Illustrator-first layout.
 ---
 
 # vivarium-report — publication-grade figures from comparative-genomics results

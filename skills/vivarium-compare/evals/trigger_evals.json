@@ -1,0 +1,50 @@
+[
+  {
+    "query": "Are strain A and strain B the same species? Compute ANI.",
+    "should_trigger": true
+  },
+  {
+    "query": "Calculate AAI across these genomes.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which genes are unique to strain L5 versus the others?",
+    "should_trigger": true
+  },
+  {
+    "query": "Build the core and accessory pangenome for these genomes (OrthoFinder).",
+    "should_trigger": true
+  },
+  {
+    "query": "Align genome A against genome B and show how syntenic they are.",
+    "should_trigger": true
+  },
+  {
+    "query": "这几个菌株是不是同一个种？算个 ANI。",
+    "should_trigger": true
+  },
+  {
+    "query": "哪些基因是 L5 独有的，做个 pangenome",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the N50 and GC of this assembly?",
+    "should_trigger": false
+  },
+  {
+    "query": "Build a phylogenetic tree from these rpoB sequences.",
+    "should_trigger": false
+  },
+  {
+    "query": "Find a homolog of my cellulase in this proteome.",
+    "should_trigger": false
+  },
+  {
+    "query": "Make a publication heatmap from this matrix.",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarize this PDF for me.",
+    "should_trigger": false
+  }
+]

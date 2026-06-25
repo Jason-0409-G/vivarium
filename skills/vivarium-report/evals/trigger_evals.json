@@ -1,0 +1,50 @@
+[
+  {
+    "query": "Make a publication-quality heatmap from this ANI matrix.",
+    "should_trigger": true
+  },
+  {
+    "query": "Plot the CAZy category counts as a journal-ready bar chart.",
+    "should_trigger": true
+  },
+  {
+    "query": "I have a .treefile — render it as a clean figure for the paper.",
+    "should_trigger": true
+  },
+  {
+    "query": "Visualize my dN/dS results as a figure.",
+    "should_trigger": true
+  },
+  {
+    "query": "Turn this analysis table into a Nature-style figure.",
+    "should_trigger": true
+  },
+  {
+    "query": "把这个 ANI 矩阵画成出版级热图",
+    "should_trigger": true
+  },
+  {
+    "query": "把这个 CAZy 计数表画成柱状图，出版级",
+    "should_trigger": true
+  },
+  {
+    "query": "Compute the ANI matrix for these genomes.",
+    "should_trigger": false
+  },
+  {
+    "query": "Build the tree from these sequences.",
+    "should_trigger": false
+  },
+  {
+    "query": "Annotate this genome.",
+    "should_trigger": false
+  },
+  {
+    "query": "BLAST this protein.",
+    "should_trigger": false
+  },
+  {
+    "query": "Make me an interactive plotly dashboard.",
+    "should_trigger": false
+  }
+]

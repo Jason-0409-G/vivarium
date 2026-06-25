@@ -10,6 +10,7 @@ in SVG/PDF, spines off. Exports SVG (editable) + PDF + TIFF (600 dpi, LZW-compre
 Never auto-installs anything; if a package is missing it stops and says which.
 """
 import argparse
+import shlex
 import sys
 
 try:
@@ -50,12 +51,19 @@ def read_table(path, **kw):
         die(f"could not read {path}: {e}")
 
 
-def save_pub(fig, out, dpi=600):
+def save_pub(fig, out, action, dpi=600):
     fig.savefig(f"{out}.svg", bbox_inches="tight")
     fig.savefig(f"{out}.pdf", bbox_inches="tight")
     fig.savefig(f"{out}.tiff", dpi=dpi, bbox_inches="tight",
                 pil_kwargs={"compression": "tiff_lzw"})
-    print(f"wrote {out}.svg / {out}.pdf / {out}.tiff  ({dpi} dpi, LZW)")
+    # Provenance footer (same shape the vivarium shell runners print): a figure with no
+    # version stamp is unreproducible three months later when you write the methods.
+    pyver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    cmd = "plot.py " + " ".join(shlex.quote(x) for x in sys.argv[1:])
+    print(f"=== vivarium-report {action} done ===")
+    print(f"tool:    matplotlib {mpl.__version__} (pandas {pd.__version__}, numpy {np.__version__}, Python {pyver})")
+    print(f"command: {cmd}")
+    print(f"out:     {out}.svg / {out}.pdf / {out}.tiff  ({dpi} dpi, LZW)")
 
 
 def cmd_heatmap(a):
@@ -89,7 +97,7 @@ def cmd_heatmap(a):
     cb.set_label(a.cbar_label or "value", fontsize=6.5)
     if a.title:
         ax.set_title(a.title, fontsize=7.5, fontweight="bold")
-    save_pub(fig, a.out, a.dpi)
+    save_pub(fig, a.out, "heatmap", a.dpi)
 
 
 def cmd_bars(a):
@@ -126,7 +134,7 @@ def cmd_bars(a):
         ax.legend(fontsize=6, ncol=1, loc="best")
     if a.title:
         ax.set_title(a.title, fontsize=7.5, fontweight="bold")
-    save_pub(fig, a.out, a.dpi)
+    save_pub(fig, a.out, "bars", a.dpi)
 
 
 def main():

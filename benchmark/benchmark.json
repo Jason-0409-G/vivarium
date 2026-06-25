@@ -1,0 +1,381 @@
+{
+  "metadata": {
+    "skill_name": "vivarium (comparative-genomics skill set)",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "claude-opus-4-8 (general-purpose subagents)",
+    "analyzer_model": "claude-opus-4-8",
+    "timestamp": "2026-06-24T15:45:52Z",
+    "evals_run": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 1,
+    "note": "1 run per (eval x configuration); 4 tasks across search/compare/phylo/report. Baseline = same prompt, same bio_tools env, NO skill. Single-run, single-machine; directional evidence, not a powered statistical claim."
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 45.7,
+        "tokens": 50559,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Hit table has named columns, not raw outfmt-6 integers",
+          "passed": true,
+          "evidence": "hits.tsv header: qseqid sseqid pident length evalue bitscore qcovhsp"
+        },
+        {
+          "text": "Best homolog reported per query with %identity, e-value, and query coverage",
+          "passed": true,
+          "evidence": "3/3 queries: SecA 99.67%/100%cov/e=0, +2 hypothetical at 100% & 99.33%"
+        },
+        {
+          "text": "Interpretation given (ortholog identity / synteny), not a number dump",
+          "passed": true,
+          "evidence": "notes consecutive loci KDH10_03679-81 = conserved synteny"
+        },
+        {
+          "text": "Provenance: tool + version recorded",
+          "passed": true,
+          "evidence": "blastp 2.17.0+, e-value 1e-5, outfmt 6 +qcovhsp"
+        },
+        {
+          "text": "Deliverables dir left clean (no scratch DB / intermediate binaries)",
+          "passed": true,
+          "evidence": "only hits.tsv + answer.md (script builds DB in mktemp)"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 49.5,
+        "tokens": 50554,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "4x4 ANI matrix produced",
+          "passed": true,
+          "evidence": "ani_matrix.tsv 4x4, no NA"
+        },
+        {
+          "text": "L5-M7 ANI ~98.5 reported",
+          "passed": true,
+          "evidence": "98.46/98.51 (~98.5)"
+        },
+        {
+          "text": "Same-species call tied to >=95% ANI criterion",
+          "passed": true,
+          "evidence": "same species under ANI>=95% (Jain 2018)"
+        },
+        {
+          "text": "Provenance: fastANI version recorded",
+          "passed": true,
+          "evidence": "fastANI v1.34 + exact command"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 117.3,
+        "tokens": 60698,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "align->trim->ML tree, treefile produced",
+          "passed": true,
+          "evidence": "MAFFT->trimAl->IQ-TREE, groEL.treefile"
+        },
+        {
+          "text": "Branch-support metric reported (UFBoot/SH-aLRT)",
+          "passed": true,
+          "evidence": "SH-aLRT 1000 + UFBoot 1000 per node"
+        },
+        {
+          "text": "Substitution model reported",
+          "passed": true,
+          "evidence": "DAYHOFF+F+I (ModelFinder BIC)"
+        },
+        {
+          "text": "Provenance + honest support read (not overclaimed)",
+          "passed": true,
+          "evidence": "versions given; flags tree unresolved (near-identical seqs)"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 73.8,
+        "tokens": 55712,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Exports the 3 publication formats: SVG + PDF + TIFF",
+          "passed": true,
+          "evidence": "fig_ani_heatmap.svg + .pdf + .tiff"
+        },
+        {
+          "text": "TIFF at 600 dpi print resolution",
+          "passed": true,
+          "evidence": "TIFF dpi=(600,600), compression=tiff_lzw"
+        },
+        {
+          "text": "Annotated heatmap with restrained/Nature-style conventions",
+          "passed": true,
+          "evidence": "Arial small fonts, editable text, single viridis, luminance-contrast labels"
+        },
+        {
+          "text": "Provenance: plotter + version footer",
+          "passed": true,
+          "evidence": "matplotlib 3.10.0/pandas 2.3.3/numpy 2.1.3/Python 3.13.9 footer + command"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "total": 5,
+        "time_seconds": 69.3,
+        "tokens": 51791,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Hit table has named columns, not raw outfmt-6 integers",
+          "passed": true,
+          "evidence": "best_hits.tsv header: query subject ... pident evalue qcovs ..."
+        },
+        {
+          "text": "Best homolog reported per query with %identity, e-value, and query coverage",
+          "passed": true,
+          "evidence": "3/3 queries reported with pident/evalue/qcovs"
+        },
+        {
+          "text": "Interpretation given (ortholog identity / synteny), not a number dump",
+          "passed": true,
+          "evidence": "notes syntenic near-identical neighborhood"
+        },
+        {
+          "text": "Provenance: tool + version recorded",
+          "passed": true,
+          "evidence": "BLAST+ 2.17.0+ recorded"
+        },
+        {
+          "text": "Deliverables dir left clean (no scratch DB / intermediate binaries)",
+          "passed": false,
+          "evidence": "left 8 BLAST DB binaries target_db.{phr,pin,psq,...} in deliverables dir"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 78.6,
+        "tokens": 50481,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "4x4 ANI matrix produced",
+          "passed": true,
+          "evidence": "ANI_matrix.tsv 4x4 symmetric"
+        },
+        {
+          "text": "L5-M7 ANI ~98.5 reported",
+          "passed": true,
+          "evidence": "98.48% reciprocal mean"
+        },
+        {
+          "text": "Same-species call tied to >=95% ANI criterion",
+          "passed": true,
+          "evidence": "same species, >=95% boundary"
+        },
+        {
+          "text": "Provenance: fastANI version recorded",
+          "passed": true,
+          "evidence": "fastANI v1.34 recorded"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 136.3,
+        "tokens": 57228,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "align->trim->ML tree, treefile produced",
+          "passed": true,
+          "evidence": "MAFFT->trimAl->IQ-TREE, groEL_iqtree.treefile"
+        },
+        {
+          "text": "Branch-support metric reported (UFBoot/SH-aLRT)",
+          "passed": true,
+          "evidence": "SH-aLRT + UFBoot2 1000 reps"
+        },
+        {
+          "text": "Substitution model reported",
+          "passed": true,
+          "evidence": "DAYHOFF+F+I (BIC, logL -1624.94)"
+        },
+        {
+          "text": "Provenance + honest support read (not overclaimed)",
+          "passed": true,
+          "evidence": "MAFFT v7.526/trimAl v1.5/IQ-TREE 3.1.1; flags weak support honestly"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 2,
+        "failed": 2,
+        "total": 4,
+        "time_seconds": 104.4,
+        "tokens": 53299,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Exports the 3 publication formats: SVG + PDF + TIFF",
+          "passed": false,
+          "evidence": "produced SVG + PDF + PNG -> no TIFF (PNG is screen raster, not print-ready)"
+        },
+        {
+          "text": "TIFF at 600 dpi print resolution",
+          "passed": false,
+          "evidence": "no TIFF; PNG carries no print-dpi guarantee"
+        },
+        {
+          "text": "Annotated heatmap with restrained/Nature-style conventions",
+          "passed": true,
+          "evidence": "viridis, per-cell annotations, contrast-adaptive text"
+        },
+        {
+          "text": "Provenance: plotter + version footer",
+          "passed": true,
+          "evidence": "provenance.json with scipy/matplotlib/pandas/numpy/Python versions"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 71.575,
+        "stddev": 32.9269,
+        "min": 45.7,
+        "max": 117.3
+      },
+      "tokens": {
+        "mean": 54380.75,
+        "stddev": 4862.4295,
+        "min": 50554,
+        "max": 60698
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.825,
+        "stddev": 0.2363,
+        "min": 0.5,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 97.15,
+        "stddev": 30.0278,
+        "min": 69.3,
+        "max": 136.3
+      },
+      "tokens": {
+        "mean": 53199.75,
+        "stddev": 2921.9187,
+        "min": 50481,
+        "max": 57228
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.18",
+      "time_seconds": "-25.6",
+      "tokens": "+1181"
+    }
+  },
+  "notes": []
+}

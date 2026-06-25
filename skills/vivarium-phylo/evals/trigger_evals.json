@@ -1,0 +1,46 @@
+[
+  {
+    "query": "Build a maximum-likelihood tree from these 25 protein sequences with bootstrap support.",
+    "should_trigger": true
+  },
+  {
+    "query": "Align these homologous sequences and infer a phylogeny.",
+    "should_trigger": true
+  },
+  {
+    "query": "Is this gene under positive selection? Compute dN/dS (omega).",
+    "should_trigger": true
+  },
+  {
+    "query": "Run PAML / codeml to test this orthogroup for selection.",
+    "should_trigger": true
+  },
+  {
+    "query": "用这些 rpoB 序列建一棵 ML 树，带自展支持。",
+    "should_trigger": true
+  },
+  {
+    "query": "这个基因受不受选择？给我算 dN/dS。",
+    "should_trigger": true
+  },
+  {
+    "query": "Compute pairwise ANI across these genomes.",
+    "should_trigger": false
+  },
+  {
+    "query": "I already have a .treefile — render it as a clean figure.",
+    "should_trigger": false
+  },
+  {
+    "query": "Annotate this genome with Prokka.",
+    "should_trigger": false
+  },
+  {
+    "query": "BLAST this sequence to identify it.",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the weather tomorrow?",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "query": "Run the whole comparative-genomics pipeline on these 6 genomes and make the figures.",
+    "should_trigger": true
+  },
+  {
+    "query": "Characterize these strains end to end: relatedness, unique genes, a tree, and figures.",
+    "should_trigger": true
+  },
+  {
+    "query": "Compare these genomes and produce publication figures for all of it.",
+    "should_trigger": true
+  },
+  {
+    "query": "把这套基因组从头到尾比较分析一遍，最后出图。",
+    "should_trigger": true
+  },
+  {
+    "query": "跑完整的比较基因组流程",
+    "should_trigger": true
+  },
+  {
+    "query": "Just compute the ANI between these two strains.",
+    "should_trigger": false
+  },
+  {
+    "query": "Just build a tree from these sequences.",
+    "should_trigger": false
+  },
+  {
+    "query": "Just BLAST this one protein.",
+    "should_trigger": false
+  },
+  {
+    "query": "Just make a heatmap of this matrix.",
+    "should_trigger": false
+  },
+  {
+    "query": "Polish the abstract of my manuscript.",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "query": "What's the N50, GC content, and contig count of this assembly?",
+    "should_trigger": true
+  },
+  {
+    "query": "How good is this genome assembly? Give me the QC stats.",
+    "should_trigger": true
+  },
+  {
+    "query": "Annotate this genome and call its genes with Prokka.",
+    "should_trigger": true
+  },
+  {
+    "query": "Get me a CAZy / COG function table for this genome before I compare it.",
+    "should_trigger": true
+  },
+  {
+    "query": "基因组质控一下，N50 和 GC 多少？",
+    "should_trigger": true
+  },
+  {
+    "query": "注释这个基因组，把基因都 call 出来",
+    "should_trigger": true
+  },
+  {
+    "query": "Compute ANI between these two strains.",
+    "should_trigger": false
+  },
+  {
+    "query": "Build a maximum-likelihood tree from these sequences.",
+    "should_trigger": false
+  },
+  {
+    "query": "BLAST this protein against the proteome.",
+    "should_trigger": false
+  },
+  {
+    "query": "Plot this ANI matrix as a heatmap.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the methods section of my paper.",
+    "should_trigger": false
+  }
+]

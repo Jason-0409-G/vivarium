@@ -1,6 +1,10 @@
 # macOS
 .DS_Store
 
+# python bytecode
+__pycache__/
+*.pyc
+
 # skill-creator eval workspaces (agent test outputs — regenerable, large)
 skills/*-workspace/
 
@@ -25,3 +29,4 @@ Rplots.pdf
 *.bak.*
 *.log
 /tmp/
+benchmark_runs/

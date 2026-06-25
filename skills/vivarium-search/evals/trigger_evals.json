@@ -1,0 +1,46 @@
+[
+  {
+    "query": "Does this proteome contain a homolog of my query protein?",
+    "should_trigger": true
+  },
+  {
+    "query": "BLAST this unknown sequence and tell me what it most likely is.",
+    "should_trigger": true
+  },
+  {
+    "query": "Find the best hit for this protein in the reference proteome.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which of these genomes carries a copy of the nifH gene?",
+    "should_trigger": true
+  },
+  {
+    "query": "Run an HMM/Pfam domain search on this protein.",
+    "should_trigger": true
+  },
+  {
+    "query": "blast 一下这条序列看是什么",
+    "should_trigger": true
+  },
+  {
+    "query": "这个基因组里有没有 X 的同源基因？",
+    "should_trigger": true
+  },
+  {
+    "query": "Compute ANI between these strains.",
+    "should_trigger": false
+  },
+  {
+    "query": "Build a phylogenetic tree from these sequences.",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the N50 of this assembly?",
+    "should_trigger": false
+  },
+  {
+    "query": "Plot this matrix as a heatmap.",
+    "should_trigger": false
+  }
+]
