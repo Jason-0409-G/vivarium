@@ -299,6 +299,10 @@ def _validate_field_type(field: str, spec: str, value: Any) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise IntegrityError(f"{field} must be an integer")
         return
+    if spec == "boolean":
+        if not isinstance(value, bool):
+            raise IntegrityError(f"{field} must be a boolean")
+        return
     if spec in {"list", "empty_list", "string_list", "dependency_list", "obligation_deltas", "client_deltas"}:
         if not isinstance(value, list):
             raise IntegrityError(f"{field} must be a list")

@@ -176,6 +176,11 @@ def reduce_run_validity(
             and local.run_id in overlay.affected_run_ids
         ):
             return "descendant"
+        if (
+            overlay.event_type == "ROLLBACK_COMMITTED"
+            and local.run_id in overlay.affected_run_ids
+        ):
+            return "owner"
         return None
 
     def overlay_transition(overlay, guard):
@@ -229,7 +234,8 @@ def reduce_run_validity(
         if overlay is None or relation is None:
             continue
         guard = overlay.owner_guard if relation == "owner" else overlay.descendant_guard
-        _validate_overlay_binding(local, overlay)
+        if overlay.event_type != "ROLLBACK_COMMITTED":
+            _validate_overlay_binding(local, overlay)
         if overlay.event_type == "STAGE_COMMITTED":
             transition = overlay_transition(overlay, guard)
             set_effective_state(AnalysisState(transition.to_state))
@@ -317,6 +323,10 @@ def reduce_run_validity(
             transition = overlay_transition(overlay, guard)
             set_effective_state(AnalysisState(transition.to_state))
             operational_escalated = True
+        elif overlay.event_type == "ROLLBACK_COMMITTED":
+            if active_attempt().analysis_state != AnalysisState.COMMITTED:
+                raise IntegrityError("rollback may only invalidate a committed run")
+            set_effective_state(AnalysisState.STALE_BRANCH)
 
     active = active_attempt()
     edges_by_source: dict[str, set[str]] = {}

@@ -207,14 +207,151 @@ def _reduce_project_cut(
     explicit_invalid: set[str] = set()
     overlays: list[ProjectOverlay] = []
     revision_actions: list[ProjectRevisionAction] = []
+    branch_heads: dict[str, tuple[str, int]] = {}
+    branch_ancestry: dict[str, set[str]] = {}
     open_recheck_scopes: dict[
         tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]
     ] = {}
     for revision, namespace, item, payload, contract in semantic:
+        task4_commit_fields = {
+            "branch_id",
+            "expected_branch_head",
+            "expected_generation",
+            "new_generation",
+            "new_state_snapshot_id",
+            "expected_work_root",
+            "new_work_root",
+            "acceptance_contract_digest",
+            "evidence_bundle_digest",
+            "payload_root_digest",
+            "completion_claim_digest",
+            "completion_proof_digest",
+            "completion_grade",
+            "execution_evidence_cut_digest",
+            "validator_report_digest",
+            "review_digests",
+            "context_project_revision",
+            "knowledge_dependency_vector_digest",
+            "expected_dependency_closure_digest",
+            "canonical_dependency_edges",
+            "checker_quorum_valid",
+            "budget_available",
+        }
+        present_task4_fields = task4_commit_fields & set(payload)
+        if (
+            item.event_type == "STAGE_COMMITTED"
+            and present_task4_fields
+            and present_task4_fields != task4_commit_fields
+        ):
+            raise IntegrityError("stage commit Task 4 authority fields are incomplete")
+        if item.event_type == "STAGE_COMMITTED" and "branch_id" in payload:
+            branch_id = _require_string(payload, "branch_id")
+            current_head, current_generation = branch_heads.get(
+                branch_id, (ZERO_HASH, 0)
+            )
+            current_work_root = domain_hash(
+                ACTIVE_ROOT_DOMAIN,
+                {
+                    "namespace": "work",
+                    "objects": [
+                        _object_projection(value)
+                        for value in sorted(objects.values())
+                        if value.namespace == "work"
+                    ],
+                },
+            )
+            if (
+                payload["expected_branch_head"] != current_head
+                or payload["expected_generation"] != current_generation
+                or payload["new_generation"] != current_generation + 1
+                or payload["new_state_snapshot_id"] != payload["object_head"]
+                or payload["expected_work_root"] != current_work_root
+                or not payload["checker_quorum_valid"]
+                or not payload["budget_available"]
+                or payload["review_digests"] != sorted(set(payload["review_digests"]))
+            ):
+                raise IntegrityError("stage commit CAS/authority is inconsistent")
+            branch_heads[branch_id] = (
+                payload["new_state_snapshot_id"], payload["new_generation"]
+            )
+            branch_ancestry.setdefault(branch_id, {ZERO_HASH}).add(
+                payload["new_state_snapshot_id"]
+            )
+        elif item.event_type == "ROLLBACK_COMMITTED":
+            branch_id = _require_string(payload, "branch_id")
+            current = branch_heads.get(branch_id, (ZERO_HASH, 0))
+            if (
+                payload["expected_branch_head"] != current[0]
+                or payload["expected_generation"] != current[1]
+                or payload["new_generation"] != current[1] + 1
+                or payload["object_head"] != payload["target_checkpoint_id"]
+                or payload["target_checkpoint_id"]
+                not in branch_ancestry.get(branch_id, {ZERO_HASH})
+            ):
+                raise IntegrityError("rollback branch CAS/ancestry is inconsistent")
+            branch_heads[branch_id] = (
+                payload["target_checkpoint_id"], payload["new_generation"]
+            )
+        elif item.event_type == "BRANCH_FORKED":
+            branch_id = _require_string(payload, "branch_id")
+            parent_id = _require_string(payload, "parent_branch_id")
+            parent = branch_heads.get(parent_id, (ZERO_HASH, 0))
+            if (
+                branch_id in branch_heads
+                or payload["initial_generation"] != 0
+                or payload["parent_state_root"] != parent[0]
+                or payload["parent_checkpoint_id"]
+                not in branch_ancestry.get(parent_id, {ZERO_HASH})
+                or payload["object_head"] != payload["parent_checkpoint_id"]
+            ):
+                raise IntegrityError("fork parent binding is inconsistent")
+            branch_heads[branch_id] = (payload["object_head"], 0)
+            branch_ancestry[branch_id] = {
+                *branch_ancestry.get(parent_id, {ZERO_HASH}),
+                payload["object_head"],
+            }
         active_object = _project_object(namespace, payload)
         mutates_object = contract.action != "project_recheck"
         if mutates_object:
             objects[(namespace, active_object.object_id)] = active_object
+        if item.event_type == "STAGE_COMMITTED" and "branch_id" in payload:
+            new_work_root = domain_hash(
+                ACTIVE_ROOT_DOMAIN,
+                {
+                    "namespace": "work",
+                    "objects": [
+                        _object_projection(value)
+                        for value in sorted(objects.values())
+                        if value.namespace == "work"
+                    ],
+                },
+            )
+            canonical_edges = [
+                [
+                    f"work:{active_object.object_id}",
+                    f"{dependency.namespace}:{dependency.object_id}",
+                ]
+                for dependency in active_object.dependencies
+            ]
+            dependency_projection = [
+                {
+                    "namespace": dependency.namespace,
+                    "object_id": dependency.object_id,
+                    "object_head": dependency.object_head,
+                }
+                for dependency in active_object.dependencies
+            ]
+            if (
+                payload["new_work_root"] != new_work_root
+                or payload["canonical_dependency_edges"] != canonical_edges
+                or payload["expected_dependency_closure_digest"]
+                != domain_hash(
+                    "vivarium-dependency-closure/v1", dependency_projection
+                )
+                or payload["knowledge_dependency_vector_digest"]
+                != domain_hash("vivarium-knowledge-vector/v1", dependency_projection)
+            ):
+                raise IntegrityError("stage commit work/dependency binding is inconsistent")
         identity = f"{namespace}:{active_object.object_id}"
         if mutates_object:
             if contract.action == "invalidate_object":
@@ -319,6 +456,35 @@ def _reduce_project_cut(
                 affected_run_ids,
                 successor,
                 dependency_delta,
+                item.event_id,
+                item.event_hash,
+            )
+            overlays.append(overlay)
+        if contract.action == "project_rollback":
+            affected_run_ids = tuple(sorted(payload["affected_run_ids"]))
+            if not affected_run_ids or len(affected_run_ids) != len(
+                set(affected_run_ids)
+            ):
+                raise IntegrityError("rollback affected runs must be sorted and unique")
+            overlay = ProjectOverlay(
+                revision,
+                item.event_type,
+                affected_run_ids[0],
+                "",
+                "",
+                item.tx_id,
+                "",
+                "",
+                "",
+                "",
+                "rollback_invalidates_active_branch",
+                "rollback_invalidates_active_branch",
+                "work",
+                active_object.object_id,
+                tuple(sorted(payload["invalidated_roots"])),
+                affected_run_ids,
+                None,
+                None,
                 item.event_id,
                 item.event_hash,
             )
