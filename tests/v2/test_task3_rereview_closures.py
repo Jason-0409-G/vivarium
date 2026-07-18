@@ -652,20 +652,6 @@ class TemporalGraphAndClosureCounterexamples(unittest.TestCase):
         direct = {"namespace": "truth", "object_id": "stage-A", "object_head": "S1"}
         fact_a = {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
         fact_b = {"namespace": "truth", "object_id": "fact-B", "object_head": "B1"}
-        events = run_genesis("COMMITTED")
-        events = append(
-            events,
-            events[0].ledger_id,
-            "ATTEMPT_DEPENDENCIES_FROZEN",
-            {
-                "attempt_id": "attempt-1",
-                "project_revision": 0,
-                "project_semantic_cut_root": ZERO_HASH,
-                "direct_dependency_heads": [direct],
-                "dependency_closure": [direct, fact_a],
-            },
-        )
-        local = reduce_run(events)
         values = project_genesis()
         values["truth"] = append(
             values["truth"], "project-truth", "FACT_ACTIVATED",
@@ -680,6 +666,20 @@ class TemporalGraphAndClosureCounterexamples(unittest.TestCase):
             activation(3, "stage-A", "S1", (fact_a,)),
         )
         cut = reduce_project_cut(prefixes(values))
+        events = run_genesis("COMMITTED")
+        events = append(
+            events,
+            events[0].ledger_id,
+            "ATTEMPT_DEPENDENCIES_FROZEN",
+            {
+                "attempt_id": "attempt-1",
+                "project_revision": cut.project_revision,
+                "project_semantic_cut_root": cut.project_semantic_cut_root,
+                "direct_dependency_heads": [direct],
+                "dependency_closure": [direct, fact_a],
+            },
+        )
+        local = reduce_run(events)
         validity = reduce_project_validity(cut)
 
         with self.assertRaises(IntegrityError):

@@ -340,6 +340,12 @@ class CriticalContractClosureTests(unittest.TestCase):
         self.assertEqual(replayed.attempts[1].analysis_state, AnalysisState.PLANNED)
 
     def test_project_revision_order_stales_old_attempt_then_creates_successor(self):
+        values = project_genesis()
+        values["truth"] = append(
+            values["truth"], "project-truth", "FACT_ACTIVATED",
+            activation(1, "fact-A", "A1"),
+        )
+        attempt_baseline = reduce_project_cut(prefixes(values))
         local_events = run_genesis("COMMITTING")
         local_events = append(
             local_events,
@@ -347,8 +353,8 @@ class CriticalContractClosureTests(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
-                "project_revision": 0,
-                "project_semantic_cut_root": ZERO_HASH,
+                "project_revision": 1,
+                "project_semantic_cut_root": attempt_baseline.project_semantic_cut_root,
                 "direct_dependency_heads": [
                     {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
                 ],
@@ -359,11 +365,6 @@ class CriticalContractClosureTests(unittest.TestCase):
         )
         local_events, evidence, prepare = evidence_and_prepare(local_events)
         local = reduce_run(local_events)
-        values = project_genesis()
-        values["truth"] = append(
-            values["truth"], "project-truth", "FACT_ACTIVATED",
-            activation(1, "fact-A", "A1"),
-        )
         commit_payload = activation(
             2,
             "stage-review-run",
@@ -418,9 +419,11 @@ class CriticalContractClosureTests(unittest.TestCase):
                 ],
                 "expected_logical_scope_key": "logical-scope-1",
                 "new_logical_scope_key": "logical-scope-1",
-                "expected_project_revision_baseline": 0,
+                "expected_project_revision_baseline": 1,
                 "new_project_revision_baseline": 3,
-                "expected_project_semantic_cut_root_baseline": ZERO_HASH,
+                "expected_project_semantic_cut_root_baseline": (
+                    attempt_baseline.project_semantic_cut_root
+                ),
                 "new_project_semantic_cut_root_baseline": (
                     correction_baseline.project_semantic_cut_root
                 ),
@@ -806,20 +809,6 @@ class ImportantClosureTests(unittest.TestCase):
     def test_two_hop_dependency_changes_each_change_relevant_slice(self):
         stage = {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
         fact_b = {"namespace": "truth", "object_id": "fact-B", "object_head": "B1"}
-        events = run_genesis("COMMITTED")
-        events = append(
-            events,
-            events[0].ledger_id,
-            "ATTEMPT_DEPENDENCIES_FROZEN",
-            {
-                "attempt_id": "attempt-1",
-                "project_revision": 0,
-                "project_semantic_cut_root": ZERO_HASH,
-                "direct_dependency_heads": [stage],
-                "dependency_closure": [stage, fact_b],
-            },
-        )
-        local = reduce_run(events)
         values = project_genesis()
         values["truth"] = append(
             values["truth"], "project-truth", "FACT_ACTIVATED",
@@ -830,6 +819,20 @@ class ImportantClosureTests(unittest.TestCase):
             activation(2, "fact-A", "A1", (fact_b,)),
         )
         cut1 = reduce_project_cut(prefixes(values))
+        events = run_genesis("COMMITTED")
+        events = append(
+            events,
+            events[0].ledger_id,
+            "ATTEMPT_DEPENDENCIES_FROZEN",
+            {
+                "attempt_id": "attempt-1",
+                "project_revision": cut1.project_revision,
+                "project_semantic_cut_root": cut1.project_semantic_cut_root,
+                "direct_dependency_heads": [stage],
+                "dependency_closure": [stage, fact_b],
+            },
+        )
+        local = reduce_run(events)
         values["truth"] = append(
             values["truth"], "project-truth", "FACT_ACTIVATED",
             activation(3, "fact-B", "B2"),

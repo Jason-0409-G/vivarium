@@ -658,6 +658,17 @@ class ProjectRevisionAction:
 
 
 @dataclass(frozen=True)
+class ProjectRevisionSnapshot:
+    project_revision: int
+    project_semantic_cut_root: str
+    active_object_heads: tuple[ProjectObjectHead, ...]
+    invalidation_closure: tuple[str, ...]
+    locked_policy_digest: str
+    project_validity_root: str
+    project_validity_reducer_digest: str
+
+
+@dataclass(frozen=True)
 class ProjectSemanticCut:
     project_revision: int
     truth_event_seq: int
@@ -685,6 +696,7 @@ class ProjectSemanticCut:
     active_object_heads: tuple[ProjectObjectHead, ...]
     overlays: tuple[ProjectOverlay, ...]
     revision_actions: tuple[ProjectRevisionAction, ...]
+    revision_snapshots: tuple[ProjectRevisionSnapshot, ...]
     invalidation_closure: tuple[str, ...]
     project_validity_root: str
     project_validity_reducer_digest: str

@@ -54,6 +54,39 @@ def dependency_freeze_payload(revision, cut_root, direct, closure):
 
 
 class FinalCriticalClosures(unittest.TestCase):
+    def test_forged_older_baseline_cannot_claim_a_future_dependency_head(self):
+        values = project_genesis()
+        values["truth"] = append(
+            values["truth"],
+            "project-truth",
+            "FACT_ACTIVATED",
+            activation(1, "fact-A", "A1"),
+        )
+        values["truth"] = append(
+            values["truth"],
+            "project-truth",
+            "FACT_ACTIVATED",
+            activation(2, "fact-A", "A2"),
+        )
+        cut = reduce_project_cut(prefixes(values))
+        future_head = {
+            "namespace": "truth",
+            "object_id": "fact-A",
+            "object_head": "A2",
+        }
+        events = run_genesis("COMMITTED", run_id="forged-baseline")
+        events = append(
+            events,
+            events[0].ledger_id,
+            "ATTEMPT_DEPENDENCIES_FROZEN",
+            dependency_freeze_payload(1, HASH_D, (future_head,), (future_head,)),
+        )
+        local = reduce_run(events)
+        validity = reduce_project_validity(cut)
+
+        with self.assertRaises(IntegrityError):
+            reduce_run_validity(cut, validity, local)
+
     def test_prior_attempt_authority_chain_cannot_advance_retry_attempt(self):
         events = advance_to_collecting(run_genesis("PLANNED", run_id="authority-attempt"))
         events = append(

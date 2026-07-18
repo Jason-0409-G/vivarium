@@ -42,11 +42,6 @@ class RunValidityTests(unittest.TestCase):
     def setUp(self):
         dependency_a = {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
         dependency_b = {"namespace": "truth", "object_id": "fact-B", "object_head": "B1"}
-        events_a, evidence_a, prepare_a = prepared_run("depends-A", (dependency_a,))
-        events_b, evidence_b, prepare_b = prepared_run("depends-B", (dependency_b,))
-        self.local_a = reduce_run(events_a)
-        self.local_b = reduce_run(events_b)
-
         prefixes = genesis_prefixes()
         prefixes["truth"] = activate(
             prefixes["truth"], "truth", "FACT_ACTIVATED", 1, "fact-A", "A1"
@@ -54,6 +49,21 @@ class RunValidityTests(unittest.TestCase):
         prefixes["truth"] = activate(
             prefixes["truth"], "truth", "FACT_ACTIVATED", 2, "fact-B", "B1"
         )
+        dependency_baseline = reduce_project_cut(as_prefixes(prefixes))
+        events_a, evidence_a, prepare_a = prepared_run(
+            "depends-A",
+            (dependency_a,),
+            project_revision=dependency_baseline.project_revision,
+            project_semantic_cut_root=dependency_baseline.project_semantic_cut_root,
+        )
+        events_b, evidence_b, prepare_b = prepared_run(
+            "depends-B",
+            (dependency_b,),
+            project_revision=dependency_baseline.project_revision,
+            project_semantic_cut_root=dependency_baseline.project_semantic_cut_root,
+        )
+        self.local_a = reduce_run(events_a)
+        self.local_b = reduce_run(events_b)
         commit_a = event(
             prefixes["work"],
             "project-work",

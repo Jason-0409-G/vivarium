@@ -65,7 +65,13 @@ def as_prefixes(prefixes):
     return ProjectPrefixes(**prefixes)
 
 
-def prepared_run(run_id="run-1", dependency_heads=()):
+def prepared_run(
+    run_id="run-1",
+    dependency_heads=(),
+    *,
+    project_revision=0,
+    project_semantic_cut_root=ZERO_HASH,
+):
     events = ()
     first = event(
         events,
@@ -94,8 +100,8 @@ def prepared_run(run_id="run-1", dependency_heads=()):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
-                "project_revision": 0,
-                "project_semantic_cut_root": ZERO_HASH,
+                "project_revision": project_revision,
+                "project_semantic_cut_root": project_semantic_cut_root,
                 "direct_dependency_heads": list(dependency_heads),
                 "dependency_closure": list(dependency_heads),
             },

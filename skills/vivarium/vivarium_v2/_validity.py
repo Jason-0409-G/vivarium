@@ -12,6 +12,7 @@ from ._project_support import (
 from ._run_state_support import _attempt_projection
 from .canonical import domain_hash
 from .errors import IntegrityError
+from .events import ZERO_HASH
 RELEVANT_PROJECT_INPUT_DOMAIN = "vivarium-relevant-project-validity-input/v1"
 RUN_VALIDITY_DOMAIN = "vivarium-run-validity-slice/v1"
 RUN_VALIDITY_REDUCER_DIGEST = domain_hash(
@@ -21,6 +22,7 @@ RUN_VALIDITY_REDUCER_DIGEST = domain_hash(
 from .state import (
     AnalysisState,
     AttemptState,
+    DependencyHead,
     ProjectRevisionAction,
     ProjectSemanticCut,
     ProjectValidity,
@@ -45,6 +47,38 @@ def reduce_project_validity(cut: ProjectSemanticCut) -> ProjectValidity:
         or invalidation != cut.invalidation_closure
     ):
         raise IntegrityError("project semantic cut carries inconsistent validity fields")
+    if (
+        len(cut.revision_snapshots) != cut.project_revision + 1
+        or tuple(item.project_revision for item in cut.revision_snapshots)
+        != tuple(range(cut.project_revision + 1))
+    ):
+        raise IntegrityError("project semantic cut lacks complete revision snapshots")
+    for snapshot in cut.revision_snapshots:
+        snapshot_invalidation = _compute_invalidation(
+            snapshot.active_object_heads, set(snapshot.invalidation_closure)
+        )
+        snapshot_digest, snapshot_root, _, _ = _project_validity_values_v2(
+            snapshot.active_object_heads,
+            snapshot_invalidation,
+            snapshot.locked_policy_digest,
+        )
+        if (
+            snapshot_invalidation != snapshot.invalidation_closure
+            or snapshot_digest != snapshot.project_validity_reducer_digest
+            or snapshot_root != snapshot.project_validity_root
+        ):
+            raise IntegrityError("project revision snapshot has invalid validity fields")
+    final_snapshot = cut.revision_snapshots[-1]
+    if (
+        final_snapshot.project_semantic_cut_root != cut.project_semantic_cut_root
+        or final_snapshot.active_object_heads != cut.active_object_heads
+        or final_snapshot.invalidation_closure != cut.invalidation_closure
+        or final_snapshot.locked_policy_digest != cut.locked_policy_digest
+        or final_snapshot.project_validity_root != cut.project_validity_root
+        or final_snapshot.project_validity_reducer_digest
+        != cut.project_validity_reducer_digest
+    ):
+        raise IntegrityError("final project revision snapshot disagrees with semantic cut")
     return ProjectValidity(
         cut.active_object_heads,
         invalidation,
@@ -76,16 +110,58 @@ def reduce_run_validity(
     def set_effective_state(value: AnalysisState) -> None:
         attempts[active_attempt_id] = replace(active_attempt(), analysis_state=value)
 
-    baseline = active_attempt().project_revision_baseline
-    if baseline < 0 or baseline > cut.project_revision:
-        raise IntegrityError("attempt project baseline revision is outside the semantic cut")
-    if (
-        baseline > 0
-        and baseline == cut.project_revision
-        and active_attempt().project_semantic_cut_root_baseline
-        != cut.project_semantic_cut_root
-    ):
-        raise IntegrityError("attempt project baseline root disagrees with its semantic cut")
+    snapshots_by_revision = {
+        item.project_revision: item for item in cut.revision_snapshots
+    }
+
+    def validate_attempt_baseline(attempt: AttemptState) -> None:
+        baseline = attempt.project_revision_baseline
+        if baseline < 0 or baseline > cut.project_revision:
+            raise IntegrityError("attempt project baseline revision is outside the semantic cut")
+        unfrozen = (
+            baseline == 0
+            and attempt.project_semantic_cut_root_baseline == ZERO_HASH
+            and not attempt.direct_dependency_heads
+            and not attempt.dependency_closure
+        )
+        if unfrozen:
+            return
+        snapshot = snapshots_by_revision[baseline]
+        if (
+            attempt.project_semantic_cut_root_baseline
+            != snapshot.project_semantic_cut_root
+        ):
+            raise IntegrityError("attempt project baseline root is not authenticated")
+        active = {
+            (item.namespace, item.object_id): item
+            for item in snapshot.active_object_heads
+        }
+        for dependency in attempt.direct_dependency_heads:
+            current = active.get((dependency.namespace, dependency.object_id))
+            if current is None or current.object_head != dependency.object_head:
+                raise IntegrityError("attempt direct head is not active at its baseline")
+        reachable: dict[tuple[str, str], DependencyHead] = {}
+        pending = [
+            (item.namespace, item.object_id)
+            for item in attempt.direct_dependency_heads
+        ]
+        while pending:
+            identity = pending.pop()
+            if identity in reachable:
+                continue
+            current = active.get(identity)
+            if current is None:
+                raise IntegrityError("attempt closure is missing at its baseline")
+            reachable[identity] = DependencyHead(
+                current.namespace, current.object_id, current.object_head
+            )
+            pending.extend(
+                (item.namespace, item.object_id) for item in current.dependencies
+            )
+        if tuple(sorted(reachable.values())) != attempt.dependency_closure:
+            raise IntegrityError("attempt closure is not canonical at its baseline")
+
+    validate_attempt_baseline(active_attempt())
 
     def action_relation(action: ProjectRevisionAction) -> str | None:
         overlay = action.overlay
@@ -185,6 +261,7 @@ def reduce_run_validity(
             _validate_successor_attempt(successor, attempts, active_attempt_id)
             attempts[successor.attempt_id] = successor
             active_attempt_id = successor.attempt_id
+            validate_attempt_baseline(active_attempt())
             blockers.clear()
             recheck_baseline.clear()
             operational_escalated = False

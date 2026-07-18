@@ -25,7 +25,7 @@ from ._project_support import (
 from ._run_state_support import _new_attempt_from_payload
 from .canonical import domain_hash
 from .errors import IntegrityError
-from .events import Event
+from .events import Event, ZERO_HASH
 from .state import (
     AnalysisState,
     AttemptDependencyDelta,
@@ -33,6 +33,7 @@ from .state import (
     ProjectObjectHead,
     ProjectOverlay,
     ProjectPrefixes,
+    ProjectRevisionSnapshot,
     ProjectRevisionAction,
     ProjectSemanticCut,
     validate_event_payload,
@@ -139,18 +140,39 @@ def _affected_recheck_scope(
     return affected_objects, tuple(sorted(affected_runs))
 
 
+def _validate_snapshot_dependencies(direct, closure, snapshot, label):
+    objects = {
+        (item.namespace, item.object_id): item
+        for item in snapshot.active_object_heads
+    }
+    for dependency in direct:
+        current = objects.get((dependency.namespace, dependency.object_id))
+        if current is None or current.object_head != dependency.object_head:
+            raise IntegrityError(f"correction {label} direct head is not authenticated")
+    if _canonical_dependency_closure_at_revision(objects, direct) != closure:
+        raise IntegrityError(f"correction {label} closure is not authenticated")
+
+
 def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
+    return _reduce_project_cut(prefixes, build_revision_snapshots=True)
+
+
+def _reduce_project_cut(
+    prefixes: ProjectPrefixes, *, build_revision_snapshots: bool
+) -> ProjectSemanticCut:
     if not isinstance(prefixes, ProjectPrefixes):
         raise IntegrityError("project prefixes must use frozen ProjectPrefixes")
     locked_policies: set[str] = set()
     semantic: list[tuple[int, str, Event, dict[str, Any], Any]] = []
     semantic_tails: dict[str, Event] = {}
+    verified_prefixes: dict[str, tuple[Event, ...]] = {}
     for namespace in GENESIS_TYPES:
         events = _verify_event_prefix(
             getattr(prefixes, namespace),
             genesis_type=GENESIS_TYPES[namespace],
             ledger_id=GENESIS_LEDGER_IDS[namespace],
         )
+        verified_prefixes[namespace] = events
         genesis = _require_dict(events[0].payload, f"{namespace} genesis payload")
         contract = validate_event_payload(events[0].event_type, genesis, "project")
         if contract.namespace != namespace:
@@ -370,6 +392,86 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
         "project_validity_reducer_digest": validity_digest,
     }
     cut_root = domain_hash(PROJECT_CUT_DOMAIN, projection)
+    revision_snapshots: tuple[ProjectRevisionSnapshot, ...] = ()
+    if build_revision_snapshots:
+        revision_by_event = {
+            (event.ledger_id, event.event_id): revision
+            for revision, _, event, _, _ in semantic
+        }
+        snapshots: list[ProjectRevisionSnapshot] = []
+        for target_revision in range(len(semantic) + 1):
+            truncated = {}
+            for project_namespace, events in verified_prefixes.items():
+                tail_seq = 0
+                for event in events[1:]:
+                    event_revision = revision_by_event.get(
+                        (event.ledger_id, event.event_id)
+                    )
+                    if event_revision is not None and event_revision <= target_revision:
+                        tail_seq = event.event_seq
+                truncated[project_namespace] = events[: tail_seq + 1]
+            historical = _reduce_project_cut(
+                ProjectPrefixes(**truncated), build_revision_snapshots=False
+            )
+            snapshots.append(
+                ProjectRevisionSnapshot(
+                    target_revision,
+                    historical.project_semantic_cut_root,
+                    historical.active_object_heads,
+                    historical.invalidation_closure,
+                    historical.locked_policy_digest,
+                    historical.project_validity_root,
+                    historical.project_validity_reducer_digest,
+                )
+            )
+        revision_snapshots = tuple(snapshots)
+        snapshots_by_revision = {
+            snapshot.project_revision: snapshot for snapshot in revision_snapshots
+        }
+        for overlay in overlays:
+            if overlay.event_type != "CORRECTION_BRANCH_CREATED":
+                continue
+            delta = overlay.dependency_delta
+            if delta is None:
+                raise IntegrityError("project correction lacks its dependency delta")
+            new_baseline = snapshots_by_revision[overlay.project_revision - 1]
+            if (
+                delta.new_project_revision_baseline
+                != new_baseline.project_revision
+                or delta.new_project_semantic_cut_root_baseline
+                != new_baseline.project_semantic_cut_root
+            ):
+                raise IntegrityError("correction new baseline is not an authenticated cut")
+            expected_is_unfrozen = (
+                delta.expected_project_revision_baseline == 0
+                and delta.expected_project_semantic_cut_root_baseline == ZERO_HASH
+                and not delta.expected_direct_dependency_heads
+                and not delta.expected_dependency_closure
+            )
+            if not expected_is_unfrozen:
+                expected_baseline = snapshots_by_revision.get(
+                    delta.expected_project_revision_baseline
+                )
+                if (
+                    expected_baseline is None
+                    or delta.expected_project_semantic_cut_root_baseline
+                    != expected_baseline.project_semantic_cut_root
+                ):
+                    raise IntegrityError(
+                        "correction expected baseline is not an authenticated cut"
+                    )
+                _validate_snapshot_dependencies(
+                    delta.expected_direct_dependency_heads,
+                    delta.expected_dependency_closure,
+                    expected_baseline,
+                    "expected",
+                )
+            _validate_snapshot_dependencies(
+                delta.new_direct_dependency_heads,
+                delta.new_dependency_closure,
+                new_baseline,
+                "new",
+            )
     return ProjectSemanticCut(
         len(semantic),
         tails["truth"].event_seq, tails["truth"].event_hash, active_roots["truth"],
@@ -386,6 +488,7 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
         active_objects,
         tuple(overlays),
         tuple(revision_actions),
+        revision_snapshots,
         invalidation,
         validity_root,
         validity_digest,
