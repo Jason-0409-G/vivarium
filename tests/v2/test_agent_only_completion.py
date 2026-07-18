@@ -31,7 +31,7 @@ class AgentOnlyCompletionTests(unittest.TestCase):
     def test_closed_agent_only_completion_builds_one_durable_proof(self):
         store = self._store("success")
         intent = agent_only_intent()
-        evidence = agent_only_evidence()
+        evidence = agent_only_evidence(store)
         first = complete_agent_only(store, intent, evidence)
         roots = []
         for _ in range(100):
@@ -55,7 +55,7 @@ class AgentOnlyCompletionTests(unittest.TestCase):
             for capability in ("process", "network", "broker", "scheduler"):
                 with self.subTest(field=field, capability=capability):
                     store = self._store(f"external-{index}-{capability}")
-                    evidence = agent_only_evidence(**{field: (capability,)})
+                    evidence = agent_only_evidence(store, **{field: (capability,)})
                     result = complete_agent_only(store, agent_only_intent(), evidence)
                     self.assertNotEqual(result.classification.outcome, "success")
                     self.assertIsNone(result.proof)
@@ -79,11 +79,29 @@ class AgentOnlyCompletionTests(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 store = self._store(f"closure-{index}")
                 result = complete_agent_only(
-                    store, agent_only_intent(), agent_only_evidence(**overrides)
+                    store, agent_only_intent(), agent_only_evidence(store, **overrides)
                 )
                 self.assertNotEqual(result.classification.outcome, "success")
                 self.assertIsNone(result.proof)
                 self.assertEqual(store.recover().external_invocations, 0)
+
+    def test_capability_variants_and_unresolved_authority_objects_never_succeed(self):
+        for index, capability in enumerate(("process_spawn", "network_access")):
+            with self.subTest(capability=capability):
+                store = self._store(f"capability-variant-{index}")
+                result = complete_agent_only(
+                    store,
+                    agent_only_intent(),
+                    agent_only_evidence(store, requested_capabilities=(capability,)),
+                )
+                self.assertNotEqual(result.classification.outcome, "success")
+                self.assertIsNone(result.proof)
+        store = self._store("unresolved-authority")
+        result = complete_agent_only(
+            store, agent_only_intent(), agent_only_evidence()
+        )
+        self.assertNotEqual(result.classification.outcome, "success")
+        self.assertIsNone(result.proof)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from skills.vivarium.vivarium_v2.errors import IntegrityError
 from skills.vivarium.vivarium_v2.execution import (
     LOCAL_CRASH_POINTS,
     LocalExecutionBroker,
+    ProcessReceipt,
 )
 from skills.vivarium.vivarium_v2.project import ProjectStore
 from tests.v2.support import FakeLocalHarness, FrozenClock, local_execution_intent
@@ -91,6 +92,43 @@ class LocalExecutionTests(unittest.TestCase):
             with self.assertRaises(IntegrityError):
                 clean.recover(intent.execution_intent_id)
         self.assertEqual(harness.main_start_count, 1)
+
+    def test_invalid_receipt_or_uncontained_descendants_never_prove_success(self):
+        digest = "sha256:" + "a" * 64
+        for overrides in (
+            {"boot_id": ""},
+            {"pid": 0},
+            {"process_group_id": 0},
+            {"process_start_identity": ""},
+            {"stdout_digest": "SHA256:" + "A" * 64},
+            {"stderr_digest": "not-a-digest"},
+        ):
+            values = {
+                "execution_intent_id": "local-execution-1",
+                "boot_id": "boot",
+                "pid": 10,
+                "process_group_id": 10,
+                "process_start_identity": "start",
+                "stdout_digest": digest,
+                "stderr_digest": digest,
+            }
+            values.update(overrides)
+            with self.subTest(overrides=overrides), self.assertRaises(IntegrityError):
+                ProcessReceipt(**values)
+
+        class LeakyHarness(FakeLocalHarness):
+            def reap_descendants(self, receipt):
+                return {"observed_descendant_count": 1, "containment_refs": ("live",)}
+
+        store = ProjectStore.init(
+            self.root / "leaky", FrozenClock("2026-07-18T00:00:00Z")
+        )
+        store.register_run("run-1", analysis_state="EXECUTION_PENDING")
+        result = LocalExecutionBroker(store, LeakyHarness()).run_or_recover(
+            local_execution_intent()
+        )
+        self.assertNotEqual(result.classification.outcome, "success")
+        self.assertIsNone(result.proof)
 
 
 if __name__ == "__main__":

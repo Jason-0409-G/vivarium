@@ -10,6 +10,7 @@ from skills.vivarium.vivarium_v2.execution import (
     ExecutionEvidenceCut,
     ExecutionIntent,
     ProcessReceipt,
+    persist_execution_authority_object,
 )
 
 
@@ -131,8 +132,35 @@ def agent_only_intent(**overrides) -> ExecutionIntent:
     return local_execution_intent(**values)
 
 
-def agent_only_evidence(**overrides) -> AgentOnlyEvidence:
+def agent_only_evidence(store=None, **overrides) -> AgentOnlyEvidence:
     digest = lambda name: domain_hash(f"vivarium-test-agent-{name}/v1", {})
+    authority = {}
+    if store is not None:
+        authority = {
+            "maker_assignment_digest": persist_execution_authority_object(
+                store, "maker-assignment", {"assignment": "agent-task", "attempt_id": "attempt-1"}
+            ),
+            "maker_harness_completion_receipt_digest": persist_execution_authority_object(
+                store,
+                "maker-harness-completion",
+                {"execution_intent_id": "local-execution-1", "terminal": True},
+            ),
+            "capability_revocation_receipt_digest": persist_execution_authority_object(
+                store,
+                "capability-revocation",
+                {"execution_intent_id": "local-execution-1", "revoked": True},
+            ),
+            "sealed_output_bundle_digest": persist_execution_authority_object(
+                store,
+                "sealed-output-bundle",
+                {"execution_intent_id": "local-execution-1", "sealed": True},
+            ),
+            "output_quiescence_manifest_digest": persist_execution_authority_object(
+                store,
+                "output-quiescence",
+                {"execution_intent_id": "local-execution-1", "quiescent": True},
+            ),
+        }
     values = {
         "maker_terminal_success": True,
         "child_count": 0,
@@ -145,6 +173,7 @@ def agent_only_evidence(**overrides) -> AgentOnlyEvidence:
         "maker_harness_identity_digest": digest("harness"),
         "maker_harness_completion_receipt_digest": digest("completion"),
         "profile_digest": digest("profile"),
+        **authority,
     }
     values.update(overrides)
     return AgentOnlyEvidence(**values)
@@ -162,11 +191,21 @@ class FakeLocalHarness:
         self._receipts = {}
         self._terminal = {}
 
-    def _terminal_value(self, intent):
+    def _terminal_value(self, intent, receipt):
         digest = lambda name: domain_hash(
             f"vivarium-test-local-{name}/v1",
             {"execution_intent_id": intent.execution_intent_id},
         )
+        quiescence = {
+            "schema_version": "vivarium.local-quiescence-receipt/v1",
+            "execution_intent_id": intent.execution_intent_id,
+            "process_receipt_digest": receipt.process_receipt_digest,
+            "stdout_digest": receipt.stdout_digest,
+            "stderr_digest": receipt.stderr_digest,
+            "output_quiescence_manifest_digest": digest("quiescence"),
+            "observed_descendant_count": 0,
+            "containment_refs": [],
+        }
         return {
             "exit_code": self.exit_code,
             "signal": self.signal,
@@ -176,6 +215,11 @@ class FakeLocalHarness:
             "sentinel_digest": digest("sentinel"),
             "output_quiescence_manifest_digest": digest("quiescence"),
             "terminal_evidence_refs": (digest("terminal"), digest("logs")),
+            "process_terminal": True,
+            "quiescence_receipt": quiescence,
+            "quiescence_receipt_digest": domain_hash(
+                "vivarium-local-quiescence-receipt/v1", quiescence
+            ),
         }
 
     def start_wrapper(self, intent, persist_receipt_callback, crash_at=None):
@@ -197,7 +241,7 @@ class FakeLocalHarness:
         if crash_at == "after_receipt_before_attach":
             raise RuntimeError(crash_at)
         self.main_start_count += 1
-        self._terminal[intent.execution_intent_id] = self._terminal_value(intent)
+        self._terminal[intent.execution_intent_id] = self._terminal_value(intent, receipt)
         if crash_at in {"after_child_spawn", "after_wrapper_exit_before_quiescence"}:
             self.descendant_count += 1
             raise RuntimeError(crash_at)
@@ -214,6 +258,7 @@ class FakeLocalHarness:
     def reap_descendants(self, receipt):
         self.reaped_descendant_count += self.descendant_count
         self.descendant_count = 0
+        return {"observed_descendant_count": 0, "containment_refs": ()}
 
 
 def inject_once(store: ProjectStore, point: str) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,47 @@ def _tuple_of_strings(value: tuple[str, ...], field: str) -> tuple[str, ...]:
 
 
 def _is_digest(value: str) -> bool:
-    return isinstance(value, str) and value.startswith("sha256:") and len(value) == 71
+    return isinstance(value, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", value) is not None
+
+
+_AUTHORITY_OBJECT_DOMAINS = {
+    "maker-assignment": "vivarium-maker-assignment/v1",
+    "maker-harness-completion": "vivarium-maker-harness-completion-receipt/v1",
+    "capability-revocation": "vivarium-capability-revocation-receipt/v1",
+    "sealed-output-bundle": "vivarium-sealed-output-bundle/v1",
+    "output-quiescence": "vivarium-output-quiescence-manifest/v1",
+}
+
+
+def persist_execution_authority_object(
+    store: Any, kind: str, body: dict[str, Any]
+) -> str:
+    domain = _AUTHORITY_OBJECT_DOMAINS.get(kind)
+    if domain is None or not isinstance(body, dict):
+        raise IntegrityError("execution authority object kind/body is invalid")
+    digest = domain_hash(domain, body)
+    durable_replace(
+        Path(store.root) / "artifacts" / f"{digest[7:]}.{kind}.json",
+        canonical_bytes(body),
+    )
+    return digest
+
+
+def _authority_object_resolves(store: Any, kind: str, digest: str) -> bool:
+    domain = _AUTHORITY_OBJECT_DOMAINS[kind]
+    if not _is_digest(digest):
+        return False
+    path = Path(store.root) / "artifacts" / f"{digest[7:]}.{kind}.json"
+    try:
+        raw = path.read_bytes()
+        body = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    return (
+        isinstance(body, dict)
+        and canonical_bytes(body) == raw
+        and domain_hash(domain, body) == digest
+    )
 
 
 @dataclass(frozen=True)
@@ -76,6 +117,21 @@ class ProcessReceipt:
     process_start_identity: str
     stdout_digest: str
     stderr_digest: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.execution_intent_id, str) or not self.execution_intent_id:
+            raise IntegrityError("process receipt requires an execution intent ID")
+        if not isinstance(self.boot_id, str) or not self.boot_id:
+            raise IntegrityError("process receipt requires a boot identity")
+        if not isinstance(self.process_start_identity, str) or not self.process_start_identity:
+            raise IntegrityError("process receipt requires a process start identity")
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in (self.pid, self.process_group_id)
+        ):
+            raise IntegrityError("process receipt PID identities must be positive integers")
+        if not _is_digest(self.stdout_digest) or not _is_digest(self.stderr_digest):
+            raise IntegrityError("process receipt output digests are invalid")
 
     @property
     def process_receipt_digest(self) -> str:
@@ -457,6 +513,7 @@ class LocalExecutionBroker:
             "intent": directory / f"{token}.execution-intent.json",
             "receipt": directory / f"{token}.process-receipt.json",
             "agent_evidence": directory / f"{token}.agent-only-evidence.json",
+            "quiescence": directory / f"{token}.local-quiescence-receipt.json",
             "cut": directory / f"{token}.execution-evidence-cut.json",
             "classification": directory / f"{token}.completion-classification.json",
             "proof": directory / f"{token}.completion-proof.json",
@@ -618,8 +675,8 @@ class LocalExecutionBroker:
         terminal = self.harness.collect_terminal(receipt)
         if terminal is None:
             raise IntegrityError("local terminal evidence is not yet durable")
-        self.harness.reap_descendants(receipt)
-        cut = self._cut_from_terminal(intent, receipt, terminal)
+        reap_result = self.harness.reap_descendants(receipt)
+        cut = self._cut_from_terminal(intent, receipt, terminal, reap_result, paths)
         if paths["cut"].exists():
             if self._read(paths["cut"], ExecutionEvidenceCut) != cut:
                 raise IntegrityError("execution evidence cut bytes disagree on recovery")
@@ -692,9 +749,13 @@ class LocalExecutionBroker:
         )
         return LocalExecutionResult(intent, receipt, cut, classification, proof)
 
-    @staticmethod
     def _cut_from_terminal(
-        intent: ExecutionIntent, receipt: ProcessReceipt, terminal: dict[str, Any]
+        self,
+        intent: ExecutionIntent,
+        receipt: ProcessReceipt,
+        terminal: dict[str, Any],
+        reap_result: Any,
+        paths: dict[str, Path],
     ) -> ExecutionEvidenceCut:
         required = {
             "exit_code",
@@ -705,12 +766,65 @@ class LocalExecutionBroker:
             "sentinel_digest",
             "output_quiescence_manifest_digest",
             "terminal_evidence_refs",
+            "process_terminal",
+            "quiescence_receipt",
+            "quiescence_receipt_digest",
         }
         if not isinstance(terminal, dict) or set(terminal) != required:
             raise IntegrityError("local harness terminal evidence has invalid fields")
         failure_flags = []
         if terminal["oom"]:
             failure_flags.append("oom")
+        process_terminal = terminal["process_terminal"] is True
+        if not process_terminal:
+            failure_flags.append("process_not_terminal")
+        containment_closed = (
+            isinstance(reap_result, dict)
+            and set(reap_result) == {"observed_descendant_count", "containment_refs"}
+            and reap_result["observed_descendant_count"] == 0
+            and tuple(reap_result["containment_refs"]) == ()
+        )
+        if not containment_closed:
+            failure_flags.append("descendant_containment_open")
+        quiescence_body = terminal["quiescence_receipt"]
+        expected_quiescence = {
+            "schema_version": "vivarium.local-quiescence-receipt/v1",
+            "execution_intent_id": intent.execution_intent_id,
+            "process_receipt_digest": receipt.process_receipt_digest,
+            "stdout_digest": receipt.stdout_digest,
+            "stderr_digest": receipt.stderr_digest,
+            "output_quiescence_manifest_digest": terminal[
+                "output_quiescence_manifest_digest"
+            ],
+            "observed_descendant_count": 0,
+            "containment_refs": [],
+        }
+        quiescence_valid = (
+            isinstance(quiescence_body, dict)
+            and quiescence_body == expected_quiescence
+            and _is_digest(terminal["quiescence_receipt_digest"])
+            and domain_hash(
+                "vivarium-local-quiescence-receipt/v1", quiescence_body
+            )
+            == terminal["quiescence_receipt_digest"]
+        )
+        if quiescence_valid:
+            raw = canonical_bytes(quiescence_body)
+            if paths["quiescence"].exists():
+                quiescence_valid = paths["quiescence"].read_bytes() == raw
+            else:
+                durable_replace(paths["quiescence"], raw)
+            quiescence_valid = quiescence_valid and paths["quiescence"].read_bytes() == raw
+        if not quiescence_valid:
+            failure_flags.append("quiescence_receipt_invalid")
+        terminal_refs = tuple(terminal["terminal_evidence_refs"])
+        if quiescence_valid:
+            terminal_refs = (*terminal_refs, terminal["quiescence_receipt_digest"])
+        absence_evidence = []
+        if process_terminal:
+            absence_evidence.append("process_exited")
+        if quiescence_valid and containment_closed:
+            absence_evidence.append("outputs_quiescent")
         return ExecutionEvidenceCut(
             EXECUTION_EVIDENCE_CUT_SCHEMA,
             intent.execution_intent_id,
@@ -719,9 +833,9 @@ class LocalExecutionBroker:
             intent.attempt_id,
             "local_process",
             f"{receipt.boot_id}:{receipt.pid}:{receipt.process_start_identity}",
-            tuple(terminal["terminal_evidence_refs"]),
+            terminal_refs,
             tuple(failure_flags),
-            ("process_exited", "outputs_quiescent"),
+            tuple(absence_evidence),
             terminal["exit_code"],
             terminal["signal"],
             terminal["oom"],
@@ -751,8 +865,8 @@ class LocalExecutionBroker:
         )
 
 
-_EXTERNAL_AGENT_CAPABILITIES = frozenset(
-    {"process", "network", "broker", "scheduler"}
+_AGENT_ONLY_CAPABILITIES = frozenset(
+    {"workspace_read", "workspace_write", "artifact_read", "artifact_write"}
 )
 
 
@@ -789,7 +903,34 @@ def complete_agent_only(
                 "attempt_id": intent.attempt_id,
             },
         )
-        cut = _agent_only_cut(intent, evidence)
+        authority_failures = tuple(
+            field
+            for field, kind, digest in (
+                ("maker_assignment_unresolved", "maker-assignment", evidence.maker_assignment_digest),
+                (
+                    "maker_completion_unresolved",
+                    "maker-harness-completion",
+                    evidence.maker_harness_completion_receipt_digest,
+                ),
+                (
+                    "capability_revocation_unresolved",
+                    "capability-revocation",
+                    evidence.capability_revocation_receipt_digest,
+                ),
+                (
+                    "sealed_output_bundle_unresolved",
+                    "sealed-output-bundle",
+                    evidence.sealed_output_bundle_digest,
+                ),
+                (
+                    "output_quiescence_unresolved",
+                    "output-quiescence",
+                    evidence.output_quiescence_manifest_digest,
+                ),
+            )
+            if not _authority_object_resolves(store, kind, digest)
+        )
+        cut = _agent_only_cut(intent, evidence, authority_failures)
         if paths["cut"].exists():
             if broker._read(paths["cut"], ExecutionEvidenceCut) != cut:
                 raise IntegrityError("agent evidence cut bytes disagree on recovery")
@@ -851,12 +992,14 @@ def complete_agent_only(
 
 
 def _agent_only_cut(
-    intent: ExecutionIntent, evidence: AgentOnlyEvidence
+    intent: ExecutionIntent,
+    evidence: AgentOnlyEvidence,
+    authority_failures: tuple[str, ...] = (),
 ) -> ExecutionEvidenceCut:
     requested = {value.lower() for value in evidence.requested_capabilities}
     observed = {value.lower() for value in evidence.observed_capabilities}
-    external = sorted((requested | observed) & _EXTERNAL_AGENT_CAPABILITIES)
-    failures = []
+    disallowed = sorted((requested | observed) - _AGENT_ONLY_CAPABILITIES)
+    failures = list(authority_failures)
     if not evidence.maker_terminal_success:
         failures.append("maker_terminal_not_success")
     if evidence.child_count:
@@ -867,8 +1010,8 @@ def _agent_only_cut(
         failures.append("sealed_output_bundle_missing")
     if not _is_digest(evidence.output_quiescence_manifest_digest):
         failures.append("output_quiescence_missing")
-    if external:
-        failures.append("external_capability:" + ",".join(external))
+    if disallowed:
+        failures.append("disallowed_capability:" + ",".join(disallowed))
     absence = []
     if evidence.child_count == 0:
         absence.append("no_live_tasks")
@@ -876,7 +1019,7 @@ def _agent_only_cut(
         absence.append("capabilities_revoked")
     if _is_digest(evidence.output_quiescence_manifest_digest):
         absence.append("outputs_quiescent")
-    if not external:
+    if not disallowed:
         absence.append("no_external_capabilities")
     return ExecutionEvidenceCut(
         EXECUTION_EVIDENCE_CUT_SCHEMA,
@@ -928,4 +1071,5 @@ __all__ = [
     "build_completion_proof",
     "classify_completion",
     "complete_agent_only",
+    "persist_execution_authority_object",
 ]
