@@ -1,11 +1,15 @@
 {
   "schema_version": "vivarium.transition-snapshot/v1",
-  "sha256": "sha256:333ef3e86182276868cac07c2eeed9f228488533415a1913d142e4153834f991",
-  "transition_count": 201,
+  "sha256": "sha256:2f05845cb18dee44f29823d4aa29035cc95b942e468fe499120d77d147d65cd4",
+  "transition_count": 205,
   "required_tuples": [
     ["obligation", "SUBMISSION_UNCERTAIN", "SUBMISSION_RECONCILED", "unique_terminal_debts_closed", "RESOLVED", "run"],
     ["obligation", "JOB_LIVE", "OPERATION_RECONCILED", "cancel_caused_terminal", "ACCOUNTING_PENDING", "run"],
     ["obligation", "CANCELLATION_UNCERTAIN", "OPERATION_RECONCILED", "cancel_caused_terminal", "RESOLVED", "run"],
-    ["external_client", "WIRE_IN_FLIGHT", "OPERATION_RECONCILED", "cancel_response_drained", "TERMINAL_DRAINED", "run"]
+    ["external_client", "WIRE_IN_FLIGHT", "OPERATION_RECONCILED", "cancel_response_drained", "TERMINAL_DRAINED", "run"],
+    ["external_client", "CLIENT_UNCERTAIN", "DUPLICATE_ARBITRATED", "duplicate_client_drained", "TERMINAL_DRAINED", "run"],
+    ["external_client", "LIVE_FENCED", "DUPLICATE_ARBITRATED", "duplicate_client_drained", "TERMINAL_DRAINED", "run"],
+    ["external_client", "STARTING", "DUPLICATE_ARBITRATED", "duplicate_client_drained", "TERMINAL_DRAINED", "run"],
+    ["external_client", "WIRE_IN_FLIGHT", "DUPLICATE_ARBITRATED", "duplicate_client_drained", "TERMINAL_DRAINED", "run"]
   ]
 }

@@ -2,27 +2,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._reducer_support import (
+from ._replay_common import (
     ACTIVE_ROOT_DOMAIN,
     GENESIS_LEDGER_IDS,
     GENESIS_TYPES,
     LEDGER_REDUCER_DIGESTS,
-    _compute_invalidation,
-    _new_attempt_from_payload,
-    _object_projection,
-    _project_object,
-    _project_validity_values_v2,
+    _dependency,
     _require_dict,
     _require_int,
     _require_string,
     _verify_event_prefix,
+)
+from ._project_support import (
+    _compute_invalidation,
+    _object_projection,
+    _project_object,
+    _project_graph,
+    _project_validity_values_v2,
     empty_project_state_root,
 )
+from ._run_state_support import _new_attempt_from_payload
 from .canonical import domain_hash
 from .errors import IntegrityError
 from .events import Event
 from .state import (
     AnalysisState,
+    AttemptDependencyDelta,
+    DependencyHead,
     ProjectObjectHead,
     ProjectOverlay,
     ProjectPrefixes,
@@ -32,6 +38,89 @@ from .state import (
 )
 
 PROJECT_CUT_DOMAIN = "vivarium-project-semantic-cut/v1"
+
+
+def _canonical_dependency_closure_at_revision(
+    objects: dict[tuple[str, str], ProjectObjectHead],
+    direct: tuple[DependencyHead, ...],
+) -> tuple[DependencyHead, ...]:
+    reachable: dict[tuple[str, str], DependencyHead] = {}
+    pending = [(item.namespace, item.object_id) for item in direct]
+    while pending:
+        identity = pending.pop()
+        if identity in reachable:
+            continue
+        current = objects.get(identity)
+        if current is None:
+            raise IntegrityError("dependency delta references an inactive project object")
+        reachable[identity] = DependencyHead(
+            current.namespace, current.object_id, current.object_head
+        )
+        pending.extend((item.namespace, item.object_id) for item in current.dependencies)
+    return tuple(sorted(reachable.values()))
+
+
+def _parse_dependency_delta(
+    payload: dict[str, Any], objects: dict[tuple[str, str], ProjectObjectHead]
+) -> AttemptDependencyDelta:
+    raw = _require_dict(payload["dependency_delta"], "dependency_delta")
+    expected_fields = {
+        "expected_direct_dependency_heads",
+        "expected_dependency_closure",
+        "new_direct_dependency_heads",
+        "new_dependency_closure",
+        "expected_logical_scope_key",
+        "new_logical_scope_key",
+    }
+    if set(raw) != expected_fields:
+        raise IntegrityError("correction dependency delta has an invalid field set")
+
+    def dependencies(field):
+        values = raw[field]
+        if not isinstance(values, list):
+            raise IntegrityError("correction dependency delta lists must be arrays")
+        parsed = tuple(sorted(_dependency(item) for item in values))
+        if len(parsed) != len({(item.namespace, item.object_id) for item in parsed}):
+            raise IntegrityError("correction dependency identities must be unique")
+        return parsed
+
+    expected_direct = dependencies("expected_direct_dependency_heads")
+    expected_closure = dependencies("expected_dependency_closure")
+    new_direct = dependencies("new_direct_dependency_heads")
+    new_closure = dependencies("new_dependency_closure")
+    canonical = _canonical_dependency_closure_at_revision(objects, new_direct)
+    if new_closure != canonical:
+        raise IntegrityError("correction dependency closure is not canonical at its revision")
+    return AttemptDependencyDelta(
+        expected_direct,
+        expected_closure,
+        new_direct,
+        new_closure,
+        _require_string(raw, "expected_logical_scope_key"),
+        _require_string(raw, "new_logical_scope_key"),
+    )
+
+
+def _affected_recheck_scope(
+    objects: dict[tuple[str, str], ProjectObjectHead],
+    target_namespace: str,
+    target_object_id: str,
+    owner_run_id: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    target = f"{target_namespace}:{target_object_id}"
+    _, descendant_items = _project_graph(tuple(sorted(objects.values())))
+    affected_objects = tuple(sorted({target, *dict(descendant_items).get(target, ())}))
+    by_identity = {
+        f"{item.namespace}:{item.object_id}": item for item in objects.values()
+    }
+    affected_runs = {owner_run_id}
+    affected_runs.update(
+        item.owner_run_id
+        for identity in affected_objects
+        if (item := by_identity.get(identity)) is not None
+        and item.owner_run_id is not None
+    )
+    return affected_objects, tuple(sorted(affected_runs))
 
 
 def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
@@ -80,6 +169,9 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
     explicit_invalid: set[str] = set()
     overlays: list[ProjectOverlay] = []
     revision_actions: list[ProjectRevisionAction] = []
+    open_recheck_scopes: dict[
+        tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]
+    ] = {}
     for revision, namespace, item, payload, contract in semantic:
         active_object = _project_object(namespace, payload)
         objects[(namespace, active_object.object_id)] = active_object
@@ -92,18 +184,27 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
             locked_policy = _require_string(payload, "locked_policy_digest")
         overlay = None
         if contract.action in {"project_overlay", "project_correction", "project_recheck"}:
+            run_id = _require_string(payload, "run_id")
             if contract.action == "project_correction":
                 transaction_id = _require_string(payload, "correction_id")
+                dependency_delta = _parse_dependency_delta(payload, objects)
                 successor = _new_attempt_from_payload(
                     payload,
                     AnalysisState.PLANNED,
                     _require_string(payload, "prior_attempt_id"),
+                    logical_scope_key=dependency_delta.new_logical_scope_key,
+                    direct_dependency_heads=dependency_delta.new_direct_dependency_heads,
+                    dependency_closure=dependency_delta.new_dependency_closure,
                 )
-                guard = "new_branch_created"
+                owner_guard = "new_branch_created"
+                descendant_guard = ""
                 prepare_event_id = prepare_event_hash = evidence_cut_id = evidence_cut_digest = ""
                 target_namespace = target_object_id = ""
+                affected_object_ids = ()
+                affected_run_ids = (run_id,)
             else:
                 successor = None
+                dependency_delta = None
                 transaction_id = _require_string(
                     payload,
                     "commit_tx_id" if contract.action == "project_overlay" else "recheck_tx_id",
@@ -115,15 +216,47 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
                 target_namespace = payload.get("target_namespace", namespace)
                 target_object_id = payload.get("target_object_id", active_object.object_id)
                 if contract.selector_field is not None:
-                    guard = dict(
+                    mapping = dict(
                         dict(contract.selector_guards)[payload[contract.selector_field]]
-                    ).get("analysis", "")
+                    )
+                    owner_guard = mapping.get("analysis", "")
+                    descendant_guard = mapping.get("analysis_descendant", "")
                 else:
-                    guard = ""
+                    if item.event_type == "COMPLETION_PROOF_REVOKED":
+                        owner_guard = "failure_unknown_disallowed_grade"
+                        descendant_guard = "upstream_proof_revoked"
+                    elif item.event_type == "COMPLETION_RECHECK_DEFERRED":
+                        owner_guard = descendant_guard = "classification_cannot_finish_safely"
+                    else:
+                        owner_guard = descendant_guard = ""
+                if contract.action == "project_recheck":
+                    scope_key = (run_id, transaction_id)
+                    if item.event_type == "COMPLETION_RECHECK_OPENED":
+                        if scope_key in open_recheck_scopes:
+                            raise IntegrityError("recheck transaction may only be opened once")
+                        affected_object_ids, affected_run_ids = _affected_recheck_scope(
+                            objects, target_namespace, target_object_id, run_id
+                        )
+                        open_recheck_scopes[scope_key] = (
+                            affected_object_ids, affected_run_ids
+                        )
+                    else:
+                        frozen_scope = open_recheck_scopes.get(scope_key)
+                        if frozen_scope is None:
+                            raise IntegrityError("recheck action has no frozen OPEN scope")
+                        affected_object_ids, affected_run_ids = frozen_scope
+                        if item.event_type in {
+                            "COMPLETION_PROOF_REFRESHED",
+                            "COMPLETION_PROOF_REVOKED",
+                        }:
+                            del open_recheck_scopes[scope_key]
+                else:
+                    affected_object_ids = ()
+                    affected_run_ids = (run_id,)
             overlay = ProjectOverlay(
                 revision,
                 item.event_type,
-                _require_string(payload, "run_id"),
+                run_id,
                 _require_string(payload, "run_event_id"),
                 _require_string(payload, "run_event_hash"),
                 transaction_id,
@@ -131,10 +264,14 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
                 prepare_event_hash,
                 evidence_cut_id,
                 evidence_cut_digest,
-                guard,
+                owner_guard,
+                descendant_guard,
                 target_namespace,
                 target_object_id,
+                affected_object_ids,
+                affected_run_ids,
                 successor,
+                dependency_delta,
                 item.event_id,
                 item.event_hash,
             )

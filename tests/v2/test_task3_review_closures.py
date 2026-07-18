@@ -50,6 +50,7 @@ def run_genesis(state="PLANNED", run_id="review-run", attempt_id="attempt-1"):
             "analysis_state": state,
             "attempt_id": attempt_id,
             "branch_id": "branch-1",
+            "logical_scope_key": "logical-scope-1",
             "request_key": "request-1",
             "intent_key": "intent-1",
             "execution_key": "execution-1",
@@ -153,6 +154,21 @@ class CriticalContractClosureTests(unittest.TestCase):
             "EVIDENCE_CUT_FROZEN",
             {"evidence_cut_id": "cut-1", "head_digest": HASH_B},
         )
+        evidence = events[-1]
+        events = append(
+            events,
+            events[0].ledger_id,
+            "EVIDENCE_BUNDLE_FROZEN",
+            {
+                "bundle_id": "bundle-1",
+                "bundle_digest": HASH_D,
+                "evidence_cut_id": "cut-1",
+                "evidence_cut_event_id": evidence.event_id,
+                "evidence_cut_event_hash": evidence.event_hash,
+                "evidence_cut_digest": HASH_B,
+            },
+        )
+        bundle = events[-1]
         events = append(
             events,
             events[0].ledger_id,
@@ -169,15 +185,31 @@ class CriticalContractClosureTests(unittest.TestCase):
         events = append(
             events,
             events[0].ledger_id,
-            "COMPLETION_SUCCESS_PROVEN",
+            "COMPLETION_PROOF_RECORDED",
             {
+                "completion_proof_id": "proof-1",
+                "completion_proof_digest": HASH_C,
                 "classification_id": "classification-1",
                 "classification_event_id": classification_event.event_id,
                 "classification_event_hash": classification_event.event_hash,
+                "classification_digest": classified.completion_classifications[0].classification_digest,
                 "evidence_cut_id": "cut-1",
                 "evidence_cut_digest": HASH_B,
+            },
+        )
+        proof = events[-1]
+        events = append(
+            events,
+            events[0].ledger_id,
+            "COMPLETION_SUCCESS_PROVEN",
+            {
                 "completion_proof_id": "proof-1",
+                "completion_proof_event_id": proof.event_id,
+                "completion_proof_event_hash": proof.event_hash,
                 "completion_proof_digest": HASH_C,
+                "bundle_id": "bundle-1",
+                "bundle_event_id": bundle.event_id,
+                "bundle_event_hash": bundle.event_hash,
                 "bundle_digest": HASH_D,
             },
         )
@@ -209,6 +241,7 @@ class CriticalContractClosureTests(unittest.TestCase):
                 "obligation_kind": "submission",
                 "state": "SUBMISSION_UNCERTAIN",
                 "head_digest": HASH_A,
+                "side_effect_scope_key": "scope-1",
             }
         ]
         events = append((), events[0].ledger_id, "RUN_LEDGER_GENESIS", genesis)
@@ -219,6 +252,10 @@ class CriticalContractClosureTests(unittest.TestCase):
             "DUPLICATE_EXTERNAL_SIDE_EFFECT_DETECTED",
             {
                 "detection_kind": "multiple_accepted_jobs",
+                "side_effect_scope_key": "scope-1",
+                "submission_obligation_id": "submission:submission-1",
+                "scoped_obligation_ids": ["submission:submission-1"],
+                "scoped_client_ids": [],
                 "analysis_delta": {
                     "expected_state": "SUBMISSION_UNCERTAIN",
                     "new_state": "ESCALATED",
@@ -229,7 +266,8 @@ class CriticalContractClosureTests(unittest.TestCase):
                         "obligation_kind": "submission",
                         "expected_state": "SUBMISSION_UNCERTAIN",
                         "new_state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
-                        "head_digest": HASH_B,
+                        "expected_head_digest": HASH_A,
+                        "new_head_digest": HASH_B,
                     }
                 ],
                 "client_deltas": [],
@@ -242,6 +280,10 @@ class CriticalContractClosureTests(unittest.TestCase):
             "DUPLICATE_EXTERNAL_SIDE_EFFECT_DETECTED",
             {
                 "detection_kind": "multiple_accepted_jobs",
+                "side_effect_scope_key": "scope-1",
+                "submission_obligation_id": "submission:submission-1",
+                "scoped_obligation_ids": ["submission:submission-1"],
+                "scoped_client_ids": [],
                 "analysis_delta": {
                     "expected_state": "SUBMISSION_UNCERTAIN",
                     "new_state": "ESCALATED",
@@ -358,6 +400,22 @@ class CriticalContractClosureTests(unittest.TestCase):
             local_execution_key="local-2",
             submission_key="submission-2",
             operation_keys=["operation-2"],
+            dependency_delta={
+                "expected_direct_dependency_heads": [
+                    {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
+                ],
+                "new_direct_dependency_heads": [
+                    {"namespace": "truth", "object_id": "fact-A", "object_head": "A2"}
+                ],
+                "expected_dependency_closure": [
+                    {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
+                ],
+                "new_dependency_closure": [
+                    {"namespace": "truth", "object_id": "fact-A", "object_head": "A2"}
+                ],
+                "expected_logical_scope_key": "logical-scope-1",
+                "new_logical_scope_key": "logical-scope-1",
+            },
         )
         values["work"] = append(
             values["work"], "project-work", "CORRECTION_BRANCH_CREATED", correction
@@ -384,6 +442,7 @@ class CriticalContractClosureTests(unittest.TestCase):
             "obligation_kind": "submission",
             "state": "SUBMISSION_UNCERTAIN",
             "head_digest": HASH_A,
+            "side_effect_scope_key": "scope-1",
         }
         cases = (
             ("held", "SCHEDULER_BLOCKED", "JOB_LIVE"),
@@ -398,6 +457,8 @@ class CriticalContractClosureTests(unittest.TestCase):
                     "SUBMISSION_RECONCILED",
                     {
                         "reconciliation_result": result,
+                        "side_effect_scope_key": "scope-1",
+                        "submission_obligation_id": "submission:submission-1",
                         "analysis_delta": {
                             "expected_state": "SUBMISSION_UNCERTAIN",
                             "new_state": analysis_target,
@@ -408,7 +469,8 @@ class CriticalContractClosureTests(unittest.TestCase):
                                 "obligation_kind": "submission",
                                 "expected_state": "SUBMISSION_UNCERTAIN",
                                 "new_state": obligation_target,
-                                "head_digest": HASH_B,
+                                "expected_head_digest": HASH_A,
+                                "new_head_digest": HASH_B,
                             }
                         ],
                         "client_deltas": [],
@@ -422,16 +484,48 @@ class CriticalContractClosureTests(unittest.TestCase):
         duplicate = {
             "obligation_id": "submission:submission-1",
             "obligation_kind": "submission",
-            "state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
+            "state": "SUBMISSION_UNCERTAIN",
             "head_digest": HASH_A,
+            "side_effect_scope_key": "scope-1",
         }
-        events, _ = self.composite_local("ESCALATED", (duplicate,))
+        events, _ = self.composite_local("SUBMISSION_UNCERTAIN", (duplicate,))
+        events = append(
+            events,
+            events[0].ledger_id,
+            "DUPLICATE_EXTERNAL_SIDE_EFFECT_DETECTED",
+            {
+                "detection_kind": "multiple_accepted_jobs",
+                "side_effect_scope_key": "scope-1",
+                "submission_obligation_id": "submission:submission-1",
+                "scoped_obligation_ids": ["submission:submission-1"],
+                "scoped_client_ids": [],
+                "analysis_delta": {
+                    "expected_state": "SUBMISSION_UNCERTAIN",
+                    "new_state": "ESCALATED",
+                },
+                "obligation_deltas": [
+                    {
+                        "obligation_id": "submission:submission-1",
+                        "obligation_kind": "submission",
+                        "expected_state": "SUBMISSION_UNCERTAIN",
+                        "new_state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
+                        "expected_head_digest": HASH_A,
+                        "new_head_digest": HASH_B,
+                    }
+                ],
+                "client_deltas": [],
+            },
+        )
         events = append(
             events,
             events[0].ledger_id,
             "DUPLICATE_ARBITRATED",
             {
                 "arbitration_result": "live_queued",
+                "side_effect_scope_key": "scope-1",
+                "submission_obligation_id": "submission:submission-1",
+                "scoped_obligation_ids": ["submission:submission-1"],
+                "scoped_client_ids": [],
                 "analysis_delta": {"expected_state": "ESCALATED", "new_state": "QUEUED"},
                 "obligation_deltas": [
                     {
@@ -439,7 +533,8 @@ class CriticalContractClosureTests(unittest.TestCase):
                         "obligation_kind": "submission",
                         "expected_state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
                         "new_state": "JOB_LIVE",
-                        "head_digest": HASH_B,
+                        "expected_head_digest": HASH_B,
+                        "new_head_digest": HASH_C,
                     }
                 ],
                 "client_deltas": [],
@@ -454,12 +549,16 @@ class CriticalContractClosureTests(unittest.TestCase):
                 "obligation_kind": "cancellation",
                 "state": "CANCELLATION_UNCERTAIN",
                 "head_digest": HASH_A,
+                "side_effect_scope_key": "scope-1",
+                "operation_key": "cancel-1",
+                "parent_obligation_id": "submission:submission-1",
             },
             {
                 "obligation_id": "submission:submission-1",
                 "obligation_kind": "submission",
                 "state": "JOB_LIVE",
                 "head_digest": HASH_A,
+                "side_effect_scope_key": "scope-1",
             },
         )
         clients = (
@@ -467,6 +566,7 @@ class CriticalContractClosureTests(unittest.TestCase):
                 "operation_key": "cancel-1",
                 "state": "WIRE_IN_FLIGHT",
                 "head_digest": HASH_A,
+                "side_effect_scope_key": "scope-1",
             },
         )
         events, _ = self.composite_local("RUNNING_REMOTE", obligations, clients)
@@ -476,6 +576,11 @@ class CriticalContractClosureTests(unittest.TestCase):
             "OPERATION_RECONCILED",
             {
                 "operation_result": "cancel_terminal",
+                "side_effect_scope_key": "scope-1",
+                "operation_obligation_id": "operation:cancel-1",
+                "parent_obligation_id": "submission:submission-1",
+                "external_client_id": "cancel-1",
+                "operation_key": "cancel-1",
                 "analysis_delta": {
                     "expected_state": "RUNNING_REMOTE",
                     "new_state": "COLLECTING",
@@ -486,14 +591,16 @@ class CriticalContractClosureTests(unittest.TestCase):
                         "obligation_kind": "cancellation",
                         "expected_state": "CANCELLATION_UNCERTAIN",
                         "new_state": "RESOLVED",
-                        "head_digest": HASH_B,
+                        "expected_head_digest": HASH_A,
+                        "new_head_digest": HASH_B,
                     },
                     {
                         "obligation_id": "submission:submission-1",
                         "obligation_kind": "submission",
                         "expected_state": "JOB_LIVE",
                         "new_state": "ACCOUNTING_PENDING",
-                        "head_digest": HASH_B,
+                        "expected_head_digest": HASH_A,
+                        "new_head_digest": HASH_B,
                     },
                 ],
                 "client_deltas": [
@@ -501,7 +608,8 @@ class CriticalContractClosureTests(unittest.TestCase):
                         "operation_key": "cancel-1",
                         "expected_state": "WIRE_IN_FLIGHT",
                         "new_state": "TERMINAL_DRAINED",
-                        "head_digest": HASH_C,
+                        "expected_head_digest": HASH_A,
+                        "new_head_digest": HASH_C,
                     }
                 ],
             },

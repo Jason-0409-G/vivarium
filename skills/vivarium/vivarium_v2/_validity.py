@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ._reducer_support import (
+from ._project_support import (
     PROJECT_VALIDITY_REDUCER_DIGEST,
-    _attempt_projection,
     _compute_invalidation,
     _project_validity_values_v2,
     _validate_overlay_binding,
     _validate_successor_attempt,
 )
+from ._run_state_support import _attempt_projection
 from .canonical import domain_hash
 from .errors import IntegrityError
 RELEVANT_PROJECT_INPUT_DOMAIN = "vivarium-relevant-project-validity-input/v1"
@@ -70,36 +70,30 @@ def reduce_run_validity(
     recheck_baseline: dict[str, AnalysisState] = {}
     operational_escalated = False
     current_heads: dict[tuple[str, str], str] = {}
-    descendants = dict(validity.descendant_closure)
-    active_objects = {
-        f"{item.namespace}:{item.object_id}": item for item in validity.active_object_heads
-    }
-
     def active_attempt() -> AttemptState:
         return attempts[active_attempt_id]
 
     def set_effective_state(value: AnalysisState) -> None:
         attempts[active_attempt_id] = replace(active_attempt(), analysis_state=value)
 
-    def action_affects_run(action: ProjectRevisionAction) -> bool:
+    def action_relation(action: ProjectRevisionAction) -> str | None:
         overlay = action.overlay
         if overlay is None:
-            return False
+            return None
         if overlay.run_id == local.run_id:
-            return True
-        target = f"{overlay.target_namespace}:{overlay.target_object_id}"
-        affected = {target, *descendants.get(target, ())}
-        return any(
-            active_objects.get(identity) is not None
-            and active_objects[identity].owner_run_id == local.run_id
-            for identity in affected
-        )
+            return "owner"
+        if (
+            overlay.event_type.startswith("COMPLETION_")
+            and local.run_id in overlay.affected_run_ids
+        ):
+            return "descendant"
+        return None
 
-    def overlay_transition(overlay):
+    def overlay_transition(overlay, guard):
         source = active_attempt().analysis_state.value
-        if overlay.guard:
+        if guard:
             transition = match_transition(
-                "analysis", source, overlay.event_type, overlay.guard
+                "analysis", source, overlay.event_type, guard
             )
         else:
             transition = derive_transition("analysis", source, overlay.event_type, {})
@@ -134,11 +128,13 @@ def reduce_run_validity(
         ):
             set_effective_state(AnalysisState.STALE_CONTEXT)
         overlay = action.overlay
-        if overlay is None or not action_affects_run(action):
+        relation = action_relation(action)
+        if overlay is None or relation is None:
             continue
+        guard = overlay.owner_guard if relation == "owner" else overlay.descendant_guard
         _validate_overlay_binding(local, overlay)
         if overlay.event_type == "STAGE_COMMITTED":
-            transition = overlay_transition(overlay)
+            transition = overlay_transition(overlay, guard)
             set_effective_state(AnalysisState(transition.to_state))
         elif overlay.event_type == "CORRECTION_BRANCH_CREATED":
             successor = overlay.successor_attempt
@@ -150,7 +146,17 @@ def reduce_run_validity(
                 AnalysisState.STALE_COMPLETION,
             }:
                 raise IntegrityError("project correction cannot replace a non-stale attempt")
-            transition = overlay_transition(overlay)
+            dependency_delta = overlay.dependency_delta
+            if dependency_delta is None or (
+                active_attempt().direct_dependency_heads
+                != dependency_delta.expected_direct_dependency_heads
+                or active_attempt().dependency_closure
+                != dependency_delta.expected_dependency_closure
+                or active_attempt().logical_scope_key
+                != dependency_delta.expected_logical_scope_key
+            ):
+                raise IntegrityError("project correction dependency CAS does not match prior attempt")
+            transition = overlay_transition(overlay, guard)
             if transition.to_state != AnalysisState.PLANNED.value:
                 raise IntegrityError("project correction target is not PLANNED")
             _validate_successor_attempt(successor, attempts, active_attempt_id)
@@ -166,39 +172,32 @@ def reduce_run_validity(
                 recheck_baseline[active_attempt_id] = active_attempt().analysis_state
             blockers.add(overlay.transaction_id)
             if len(blockers) == 1:
-                target = (
-                    AnalysisState.COMPLETION_RECHECK_PENDING
-                    if overlay.guard == "complete_cut_durable"
-                    else AnalysisState.PENDING_COMPLETION_DEPENDENCY
-                )
                 transition = match_transition(
                     "analysis",
                     active_attempt().analysis_state.value,
                     overlay.event_type,
-                    overlay.guard,
+                    guard,
                 )
-                if transition.to_state != target.value:
-                    raise IntegrityError("recheck OPEN target disagrees with scope")
-                set_effective_state(target)
+                set_effective_state(AnalysisState(transition.to_state))
             else:
-                if overlay.guard != "additional_complete_cut_durable":
+                if guard != "additional_complete_cut_durable":
                     raise IntegrityError("additional recheck OPEN has the wrong typed scope")
-                transition = overlay_transition(overlay)
+                transition = overlay_transition(overlay, guard)
                 set_effective_state(AnalysisState(transition.to_state))
         elif overlay.event_type == "COMPLETION_PROOF_REFRESHED":
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("recheck REFRESH has no matching blocker")
             blockers.remove(overlay.transaction_id)
             if blockers:
-                if overlay.guard != "refresh_blocker_removed_others_remain":
+                if guard != "refresh_blocker_removed_others_remain":
                     raise IntegrityError("partial recheck REFRESH has the wrong typed result")
-                transition = overlay_transition(overlay)
+                transition = overlay_transition(overlay, guard)
                 set_effective_state(AnalysisState(transition.to_state))
             else:
                 baseline = recheck_baseline.pop(active_attempt_id, None)
                 if baseline is None:
                     raise IntegrityError("recheck REFRESH lost first-suspension baseline")
-                transition = overlay_transition(overlay)
+                transition = overlay_transition(overlay, guard)
                 if AnalysisState(transition.to_state) != baseline:
                     raise IntegrityError("recheck REFRESH does not restore first baseline")
                 set_effective_state(baseline)
@@ -207,17 +206,35 @@ def reduce_run_validity(
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("recheck REVOKE has no matching blocker")
             blockers.remove(overlay.transaction_id)
-            transition = overlay_transition(overlay)
+            transition = overlay_transition(overlay, guard)
             set_effective_state(AnalysisState(transition.to_state))
             operational_escalated = False
         elif overlay.event_type == "COMPLETION_RECHECK_DEFERRED":
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("deferred recheck has no matching blocker")
-            transition = overlay_transition(overlay)
+            transition = overlay_transition(overlay, guard)
             set_effective_state(AnalysisState(transition.to_state))
             operational_escalated = True
 
     active = active_attempt()
+    edges_by_source: dict[str, set[str]] = {}
+    for source, dependency in validity.dependency_edges:
+        edges_by_source.setdefault(source, set()).add(dependency)
+    canonical_identities: set[str] = set()
+    pending = [
+        f"{item.namespace}:{item.object_id}" for item in active.direct_dependency_heads
+    ]
+    while pending:
+        identity = pending.pop()
+        if identity in canonical_identities:
+            continue
+        canonical_identities.add(identity)
+        pending.extend(edges_by_source.get(identity, ()))
+    claimed_identities = {
+        f"{item.namespace}:{item.object_id}" for item in active.dependency_closure
+    }
+    if claimed_identities != canonical_identities:
+        raise IntegrityError("attempt dependency closure is not canonical for project validity")
     current = {
         (item.namespace, item.object_id): item for item in validity.active_object_heads
     }

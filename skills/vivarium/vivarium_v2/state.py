@@ -46,6 +46,7 @@ COMMIT_ABORT_REASON_TARGET = {
     reason: AnalysisState(target)
     for reason, target in STATE_MACHINE["abort_reason_target"].items()
 }
+COMPLETION_ABORT_OUTCOME = dict(STATE_MACHINE["completion_abort_outcome"])
 
 
 class Transition(NamedTuple):
@@ -308,7 +309,7 @@ def _validate_field_type(field: str, spec: str, value: Any) -> None:
         if spec == "dependency_list" and not all(isinstance(item, dict) for item in value):
             raise IntegrityError(f"{field} must contain dependency objects")
         return
-    if spec in {"state_delta", "analysis_delta"}:
+    if spec in {"state_delta", "analysis_delta", "dependency_delta"}:
         if not isinstance(value, dict):
             raise IntegrityError(f"{field} must be an object")
         return
@@ -351,6 +352,10 @@ def derive_transition(
     selected_guard = None
     if contract.selector_field is not None:
         mapping = dict(dict(contract.selector_guards)[payload[contract.selector_field]])
+        if reducer not in mapping:
+            if candidates:
+                raise IntegrityError("typed selector disallows this reducer namespace")
+            return None
         selected_guard = mapping.get(reducer)
     if not candidates:
         if selected_guard is not None:
@@ -423,6 +428,9 @@ class ObligationRecord:
     obligation_kind: str
     state: ObligationState
     head_digest: str
+    side_effect_scope_key: str
+    operation_key: str | None
+    parent_obligation_id: str | None
 
 
 @dataclass(frozen=True, order=True)
@@ -430,6 +438,17 @@ class MutationClientRecord:
     operation_key: str
     state: ExternalClientState
     head_digest: str
+    side_effect_scope_key: str
+
+
+@dataclass(frozen=True, order=True)
+class DuplicateScope:
+    side_effect_scope_key: str
+    submission_obligation_id: str
+    obligation_ids: tuple[str, ...]
+    client_ids: tuple[str, ...]
+    event_id: str
+    event_hash: str
 
 
 @dataclass(frozen=True, order=True)
@@ -443,6 +462,7 @@ class AttemptState:
     attempt_id: str
     prior_attempt_id: str | None
     branch_id: str
+    logical_scope_key: str
     analysis_state: AnalysisState
     direct_dependency_heads: tuple[DependencyHead, ...]
     dependency_closure: tuple[DependencyHead, ...]
@@ -465,6 +485,79 @@ class CompletionClassification:
     classification_digest: str
 
 
+@dataclass(frozen=True, order=True)
+class EvidenceBundleHead:
+    bundle_id: str
+    bundle_digest: str
+    evidence_cut_id: str
+    evidence_cut_event_id: str
+    evidence_cut_event_hash: str
+    evidence_cut_digest: str
+    event_id: str
+    event_hash: str
+
+
+@dataclass(frozen=True, order=True)
+class CompletionProofHead:
+    completion_proof_id: str
+    completion_proof_digest: str
+    classification_id: str
+    classification_event_id: str
+    classification_event_hash: str
+    classification_digest: str
+    evidence_cut_id: str
+    evidence_cut_digest: str
+    event_id: str
+    event_hash: str
+
+
+@dataclass(frozen=True, order=True)
+class ValidatorReportHead:
+    validator_report_id: str
+    validator_report_digest: str
+    completion_proof_id: str
+    completion_proof_event_id: str
+    completion_proof_event_hash: str
+    completion_proof_digest: str
+    bundle_id: str
+    bundle_event_id: str
+    bundle_event_hash: str
+    bundle_digest: str
+    validation_outcome: str
+    event_id: str
+    event_hash: str
+
+
+@dataclass(frozen=True, order=True)
+class CheckerReviewHead:
+    checker_review_id: str
+    checker_review_digest: str
+    validator_report_id: str
+    validator_report_event_id: str
+    validator_report_event_hash: str
+    validator_report_digest: str
+    review_outcome: str
+    event_id: str
+    event_hash: str
+
+
+@dataclass(frozen=True, order=True)
+class QuorumDecisionHead:
+    quorum_decision_id: str
+    quorum_decision_digest: str
+    validator_report_id: str
+    validator_report_event_id: str
+    validator_report_event_hash: str
+    validator_report_digest: str
+    checker_review_id: str
+    checker_review_event_id: str
+    checker_review_event_hash: str
+    checker_review_digest: str
+    quorum_outcome: str
+    event_id: str
+    event_hash: str
+
+
 @dataclass(frozen=True)
 class RunLocalState:
     run_id: str
@@ -480,6 +573,12 @@ class RunLocalState:
     preparations: tuple[Preparation, ...]
     evidence_cut_heads: tuple[EvidenceCutHead, ...]
     completion_classifications: tuple[CompletionClassification, ...]
+    evidence_bundle_heads: tuple[EvidenceBundleHead, ...]
+    completion_proof_heads: tuple[CompletionProofHead, ...]
+    validator_report_heads: tuple[ValidatorReportHead, ...]
+    checker_review_heads: tuple[CheckerReviewHead, ...]
+    quorum_decision_heads: tuple[QuorumDecisionHead, ...]
+    duplicate_scopes: tuple[DuplicateScope, ...]
     obligations: tuple[ObligationRecord, ...]
     mutation_clients: tuple[MutationClientRecord, ...]
     postcommit_intake_blockers: tuple[str, ...]
@@ -500,6 +599,16 @@ class ProjectObjectHead:
 
 
 @dataclass(frozen=True, order=True)
+class AttemptDependencyDelta:
+    expected_direct_dependency_heads: tuple[DependencyHead, ...]
+    expected_dependency_closure: tuple[DependencyHead, ...]
+    new_direct_dependency_heads: tuple[DependencyHead, ...]
+    new_dependency_closure: tuple[DependencyHead, ...]
+    expected_logical_scope_key: str
+    new_logical_scope_key: str
+
+
+@dataclass(frozen=True, order=True)
 class ProjectOverlay:
     project_revision: int
     event_type: str
@@ -511,10 +620,14 @@ class ProjectOverlay:
     prepare_event_hash: str
     evidence_cut_id: str
     evidence_cut_digest: str
-    guard: str
+    owner_guard: str
+    descendant_guard: str
     target_namespace: str
     target_object_id: str
+    affected_object_ids: tuple[str, ...]
+    affected_run_ids: tuple[str, ...]
     successor_attempt: AttemptState | None
+    dependency_delta: AttemptDependencyDelta | None
     event_id: str
     event_hash: str
 

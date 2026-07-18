@@ -27,6 +27,7 @@ def run_genesis_payload(analysis_state="PLANNED", **extra):
         "analysis_state": analysis_state,
         "attempt_id": "attempt-1",
         "branch_id": "branch-1",
+        "logical_scope_key": "logical-scope-1",
         "request_key": "request-1",
         "intent_key": "intent-1",
         "execution_key": "execution-1",
@@ -129,6 +130,20 @@ class RunReducerTests(unittest.TestCase):
             "EVIDENCE_CUT_FROZEN",
             {"evidence_cut_id": "cut-1", "head_digest": HASH_B},
         )
+        evidence = events[-1]
+        events = append_event(
+            events,
+            "EVIDENCE_BUNDLE_FROZEN",
+            {
+                "bundle_id": "bundle-1",
+                "bundle_digest": HASH_D,
+                "evidence_cut_id": "cut-1",
+                "evidence_cut_event_id": evidence.event_id,
+                "evidence_cut_event_hash": evidence.event_hash,
+                "evidence_cut_digest": HASH_B,
+            },
+        )
+        bundle = events[-1]
         events = append_event(
             events,
             "COMPLETION_CLASSIFIED",
@@ -139,23 +154,108 @@ class RunReducerTests(unittest.TestCase):
                 "outcome": "success",
             },
         )
-        classification = events[-1]
+        classification_event = events[-1]
+        classification = reduce_run(events).completion_classifications[-1]
+        events = append_event(
+            events,
+            "COMPLETION_PROOF_RECORDED",
+            {
+                "completion_proof_id": "proof-1",
+                "completion_proof_digest": HASH_C,
+                "classification_id": "classification-1",
+                "classification_event_id": classification_event.event_id,
+                "classification_event_hash": classification_event.event_hash,
+                "classification_digest": classification.classification_digest,
+                "evidence_cut_id": "cut-1",
+                "evidence_cut_digest": HASH_B,
+            },
+        )
+        proof = events[-1]
         events = append_event(
             events,
             "COMPLETION_SUCCESS_PROVEN",
             {
-                "classification_id": "classification-1",
-                "classification_event_id": classification.event_id,
-                "classification_event_hash": classification.event_hash,
-                "evidence_cut_id": "cut-1",
-                "evidence_cut_digest": HASH_B,
                 "completion_proof_id": "proof-1",
+                "completion_proof_event_id": proof.event_id,
+                "completion_proof_event_hash": proof.event_hash,
                 "completion_proof_digest": HASH_C,
+                "bundle_id": "bundle-1",
+                "bundle_event_id": bundle.event_id,
+                "bundle_event_hash": bundle.event_hash,
                 "bundle_digest": HASH_D,
             },
         )
-        for event_type in ("VALIDATION_PASSED", "CHECKER_ALLOCATED", "CHECKER_QUORUM_PASSED"):
-            events = append_event(events, event_type, {"event_digest": HASH_B})
+        events = append_event(
+            events,
+            "VALIDATOR_REPORT_SEALED",
+            {
+                "validator_report_id": "validator-1",
+                "validator_report_digest": HASH_A,
+                "completion_proof_id": "proof-1",
+                "completion_proof_event_id": proof.event_id,
+                "completion_proof_event_hash": proof.event_hash,
+                "completion_proof_digest": HASH_C,
+                "bundle_id": "bundle-1",
+                "bundle_event_id": bundle.event_id,
+                "bundle_event_hash": bundle.event_hash,
+                "bundle_digest": HASH_D,
+                "validation_outcome": "pass",
+            },
+        )
+        validator = events[-1]
+        events = append_event(
+            events,
+            "VALIDATION_PASSED",
+            {
+                "validator_report_id": "validator-1",
+                "validator_report_event_id": validator.event_id,
+                "validator_report_event_hash": validator.event_hash,
+                "validator_report_digest": HASH_A,
+            },
+        )
+        events = append_event(events, "CHECKER_ALLOCATED", {"event_digest": HASH_B})
+        events = append_event(
+            events,
+            "CHECKER_REVIEW_SEALED",
+            {
+                "checker_review_id": "review-1",
+                "checker_review_digest": HASH_B,
+                "validator_report_id": "validator-1",
+                "validator_report_event_id": validator.event_id,
+                "validator_report_event_hash": validator.event_hash,
+                "validator_report_digest": HASH_A,
+                "review_outcome": "pass",
+            },
+        )
+        review = events[-1]
+        events = append_event(
+            events,
+            "QUORUM_DECISION_SEALED",
+            {
+                "quorum_decision_id": "quorum-1",
+                "quorum_decision_digest": HASH_C,
+                "validator_report_id": "validator-1",
+                "validator_report_event_id": validator.event_id,
+                "validator_report_event_hash": validator.event_hash,
+                "validator_report_digest": HASH_A,
+                "checker_review_id": "review-1",
+                "checker_review_event_id": review.event_id,
+                "checker_review_event_hash": review.event_hash,
+                "checker_review_digest": HASH_B,
+                "quorum_outcome": "pass",
+            },
+        )
+        quorum = events[-1]
+        events = append_event(
+            events,
+            "CHECKER_QUORUM_PASSED",
+            {
+                "quorum_decision_id": "quorum-1",
+                "quorum_decision_event_id": quorum.event_id,
+                "quorum_decision_event_hash": quorum.event_hash,
+                "quorum_decision_digest": HASH_C,
+            },
+        )
         return append_event(
             events,
             "COMMIT_PREPARED",
@@ -179,6 +279,7 @@ class RunReducerTests(unittest.TestCase):
     def test_abort_event_applies_closed_reason_target(self):
         events = self.prepared_run()
         preparation = events[-1]
+        classification_digest = reduce_run(events).completion_classifications[-1].classification_digest
         events = append_event(
             events,
             "STAGE_COMMIT_ABORTED",
@@ -189,7 +290,9 @@ class RunReducerTests(unittest.TestCase):
                 "abort_reason": "EVIDENCE_BUNDLE_INTEGRITY_FAILURE",
                 "analysis_from": "COMMITTING",
                 "analysis_target": "BLOCKED",
-                "sealed_failure_digest": "sha256:" + "c" * 64,
+                "sealed_failure_digest": classification_digest,
+                "completion_classification_id": "classification-1",
+                "completion_classification_digest": classification_digest,
                 "preparation_delta": {"from": "ACTIVE", "to": "INACTIVE"},
             },
         )
@@ -202,6 +305,7 @@ class RunReducerTests(unittest.TestCase):
     def test_abort_event_rejects_wrong_target(self):
         events = self.prepared_run()
         preparation = events[-1]
+        classification_digest = reduce_run(events).completion_classifications[-1].classification_digest
         events = append_event(
             events,
             "STAGE_COMMIT_ABORTED",
@@ -212,7 +316,9 @@ class RunReducerTests(unittest.TestCase):
                 "abort_reason": "EVIDENCE_BUNDLE_INTEGRITY_FAILURE",
                 "analysis_from": "COMMITTING",
                 "analysis_target": "VALIDATING",
-                "sealed_failure_digest": "sha256:" + "c" * 64,
+                "sealed_failure_digest": classification_digest,
+                "completion_classification_id": "classification-1",
+                "completion_classification_digest": classification_digest,
                 "preparation_delta": {"from": "ACTIVE", "to": "INACTIVE"},
             },
         )
@@ -258,6 +364,7 @@ class RunReducerTests(unittest.TestCase):
                         "obligation_kind": "submission",
                         "state": "SUBMISSION_UNCERTAIN",
                         "head_digest": "sha256:" + "1" * 64,
+                        "side_effect_scope_key": "scope-1",
                     }
                 ],
             ),
@@ -267,6 +374,10 @@ class RunReducerTests(unittest.TestCase):
             "DUPLICATE_EXTERNAL_SIDE_EFFECT_DETECTED",
             {
                 "detection_kind": "multiple_accepted_jobs",
+                "side_effect_scope_key": "scope-1",
+                "submission_obligation_id": "submission:key-1",
+                "scoped_obligation_ids": ["submission:key-1"],
+                "scoped_client_ids": [],
                 "analysis_delta": {
                     "expected_state": "SUBMISSION_UNCERTAIN",
                     "new_state": "ESCALATED",
@@ -277,7 +388,8 @@ class RunReducerTests(unittest.TestCase):
                         "obligation_kind": "submission",
                         "expected_state": "SUBMISSION_UNCERTAIN",
                         "new_state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
-                        "head_digest": "sha256:" + "2" * 64,
+                        "expected_head_digest": "sha256:" + "1" * 64,
+                        "new_head_digest": "sha256:" + "2" * 64,
                     }
                 ],
                 "client_deltas": [],
@@ -301,12 +413,14 @@ class RunReducerTests(unittest.TestCase):
             "EXTERNAL_CALL_STARTED",
             {
                 "event_digest": HASH_B,
+                "side_effect_scope_key": "scope-1",
                 "client_deltas": [
                     {
                         "operation_key": "operation:key-1",
                         "expected_state": "NONE",
                         "new_state": "STARTING",
-                        "head_digest": "sha256:" + "3" * 64,
+                        "expected_head_digest": ZERO_HASH,
+                        "new_head_digest": "sha256:" + "3" * 64,
                     }
                 ]
             },

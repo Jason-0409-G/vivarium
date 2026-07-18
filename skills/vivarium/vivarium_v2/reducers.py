@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 
 from ._federation import build_federated_state, federate
 from ._project_replay import reduce_project_cut
-from ._reducer_support import empty_project_state_root
+from ._project_support import empty_project_state_root
 from ._run_replay import reduce_run
 from ._validity import reduce_project_validity, reduce_run_validity
 from .events import Event

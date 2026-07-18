@@ -76,6 +76,7 @@ def prepared_run(run_id="run-1", dependency_heads=()):
             "analysis_state": "PLANNED",
             "attempt_id": "attempt-1",
             "branch_id": "branch-1",
+            "logical_scope_key": "logical-scope-1",
             "request_key": "request-1",
             "intent_key": "intent-1",
             "execution_key": "execution-1",
@@ -121,6 +122,20 @@ def prepared_run(run_id="run-1", dependency_heads=()):
         {"evidence_cut_id": f"cut-{run_id}", "head_digest": "sha256:" + "b" * 64},
     )
     events += (evidence,)
+    bundle = event(
+        events,
+        f"run:{run_id}",
+        "EVIDENCE_BUNDLE_FROZEN",
+        {
+            "bundle_id": f"bundle-{run_id}",
+            "bundle_digest": HASH_D,
+            "evidence_cut_id": f"cut-{run_id}",
+            "evidence_cut_event_id": evidence.event_id,
+            "evidence_cut_event_hash": evidence.event_hash,
+            "evidence_cut_digest": HASH_B,
+        },
+    )
+    events += (bundle,)
     classification = event(
         events,
         f"run:{run_id}",
@@ -133,27 +148,120 @@ def prepared_run(run_id="run-1", dependency_heads=()):
         },
     )
     events += (classification,)
+    classification_digest = reduce_run(events).completion_classifications[-1].classification_digest
+    proof_record = event(
+        events,
+        f"run:{run_id}",
+        "COMPLETION_PROOF_RECORDED",
+        {
+            "completion_proof_id": f"proof-{run_id}",
+            "completion_proof_digest": HASH_C,
+            "classification_id": f"classification-{run_id}",
+            "classification_event_id": classification.event_id,
+            "classification_event_hash": classification.event_hash,
+            "classification_digest": classification_digest,
+            "evidence_cut_id": f"cut-{run_id}",
+            "evidence_cut_digest": HASH_B,
+        },
+    )
+    events += (proof_record,)
     proof = event(
         events,
         f"run:{run_id}",
         "COMPLETION_SUCCESS_PROVEN",
         {
-            "classification_id": f"classification-{run_id}",
-            "classification_event_id": classification.event_id,
-            "classification_event_hash": classification.event_hash,
-            "evidence_cut_id": f"cut-{run_id}",
-            "evidence_cut_digest": HASH_B,
             "completion_proof_id": f"proof-{run_id}",
+            "completion_proof_event_id": proof_record.event_id,
+            "completion_proof_event_hash": proof_record.event_hash,
             "completion_proof_digest": HASH_C,
+            "bundle_id": f"bundle-{run_id}",
+            "bundle_event_id": bundle.event_id,
+            "bundle_event_hash": bundle.event_hash,
             "bundle_digest": HASH_D,
         },
     )
     events += (proof,)
-    for event_type in ("VALIDATION_PASSED", "CHECKER_ALLOCATED", "CHECKER_QUORUM_PASSED"):
-        next_event = event(
-            events, f"run:{run_id}", event_type, {"event_digest": HASH_B}
-        )
-        events += (next_event,)
+    validator = event(
+        events,
+        f"run:{run_id}",
+        "VALIDATOR_REPORT_SEALED",
+        {
+            "validator_report_id": f"validator-{run_id}",
+            "validator_report_digest": HASH_A,
+            "completion_proof_id": f"proof-{run_id}",
+            "completion_proof_event_id": proof_record.event_id,
+            "completion_proof_event_hash": proof_record.event_hash,
+            "completion_proof_digest": HASH_C,
+            "bundle_id": f"bundle-{run_id}",
+            "bundle_event_id": bundle.event_id,
+            "bundle_event_hash": bundle.event_hash,
+            "bundle_digest": HASH_D,
+            "validation_outcome": "pass",
+        },
+    )
+    events += (validator,)
+    validated = event(
+        events,
+        f"run:{run_id}",
+        "VALIDATION_PASSED",
+        {
+            "validator_report_id": f"validator-{run_id}",
+            "validator_report_event_id": validator.event_id,
+            "validator_report_event_hash": validator.event_hash,
+            "validator_report_digest": HASH_A,
+        },
+    )
+    events += (validated,)
+    allocated = event(
+        events, f"run:{run_id}", "CHECKER_ALLOCATED", {"event_digest": HASH_B}
+    )
+    events += (allocated,)
+    review = event(
+        events,
+        f"run:{run_id}",
+        "CHECKER_REVIEW_SEALED",
+        {
+            "checker_review_id": f"review-{run_id}",
+            "checker_review_digest": HASH_B,
+            "validator_report_id": f"validator-{run_id}",
+            "validator_report_event_id": validator.event_id,
+            "validator_report_event_hash": validator.event_hash,
+            "validator_report_digest": HASH_A,
+            "review_outcome": "pass",
+        },
+    )
+    events += (review,)
+    quorum = event(
+        events,
+        f"run:{run_id}",
+        "QUORUM_DECISION_SEALED",
+        {
+            "quorum_decision_id": f"quorum-{run_id}",
+            "quorum_decision_digest": HASH_C,
+            "validator_report_id": f"validator-{run_id}",
+            "validator_report_event_id": validator.event_id,
+            "validator_report_event_hash": validator.event_hash,
+            "validator_report_digest": HASH_A,
+            "checker_review_id": f"review-{run_id}",
+            "checker_review_event_id": review.event_id,
+            "checker_review_event_hash": review.event_hash,
+            "checker_review_digest": HASH_B,
+            "quorum_outcome": "pass",
+        },
+    )
+    events += (quorum,)
+    quorum_passed = event(
+        events,
+        f"run:{run_id}",
+        "CHECKER_QUORUM_PASSED",
+        {
+            "quorum_decision_id": f"quorum-{run_id}",
+            "quorum_decision_event_id": quorum.event_id,
+            "quorum_decision_event_hash": quorum.event_hash,
+            "quorum_decision_digest": HASH_C,
+        },
+    )
+    events += (quorum_passed,)
     prepare = event(
         events,
         f"run:{run_id}",
@@ -317,6 +425,14 @@ class FederatedRecoveryTests(unittest.TestCase):
                 "local_execution_key": "local-execution-2",
                 "submission_key": "submission-2",
                 "operation_keys": ["operation-2"],
+                "dependency_delta": {
+                    "expected_direct_dependency_heads": [],
+                    "new_direct_dependency_heads": [],
+                    "expected_dependency_closure": [],
+                    "new_dependency_closure": [],
+                    "expected_logical_scope_key": "logical-scope-1",
+                    "new_logical_scope_key": "logical-scope-1",
+                },
             },
         )
         prefixes["work"] += (correction,)
