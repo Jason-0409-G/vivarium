@@ -150,7 +150,7 @@ def cmd_update(a):
     print(f"updated stage {a.stage} ({st['skill']}:{st['action']}) -> status={st['status']}")
 
 
-def main():
+def legacy_main(argv=None):
     p = argparse.ArgumentParser(description="vivarium orchestrator (plan + track a comparative-genomics DAG).")
     sub = p.add_subparsers(dest="cmd", required=True)
     i = sub.add_parser("init", help="plan a DAG + create the run workspace/manifest")
@@ -174,8 +174,19 @@ def main():
     u.add_argument("--outputs", nargs="*", default=None)
     u.add_argument("--qc", default=None)
     u.set_defaults(func=cmd_update)
-    a = p.parse_args()
+    a = p.parse_args(argv)
     a.func(a)
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["v2"]:
+        skill_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if skill_root not in sys.path:
+            sys.path.insert(0, skill_root)
+        from vivarium_v2.cli import main as v2_main
+        raise SystemExit(v2_main(argv[1:]))
+    legacy_main(argv)
 
 
 if __name__ == "__main__":
