@@ -4,6 +4,13 @@ from pathlib import Path
 
 from skills.vivarium.vivarium_v2.project import COMMIT_CRASH_POINTS, PreparedCommit, ProjectStore
 from skills.vivarium.vivarium_v2.canonical import domain_hash
+from skills.vivarium.vivarium_v2.execution import (
+    AgentOnlyEvidence,
+    EXECUTION_EVIDENCE_CUT_SCHEMA,
+    ExecutionEvidenceCut,
+    ExecutionIntent,
+    ProcessReceipt,
+)
 
 
 class FrozenClock:
@@ -66,6 +73,149 @@ def prepared_fixture(root: Path) -> ProjectStore:
     return store
 
 
+def execution_evidence_cut(**overrides) -> ExecutionEvidenceCut:
+    digest = lambda name: domain_hash(f"vivarium-test-execution-{name}/v1", {})
+    values = {
+        "schema_version": EXECUTION_EVIDENCE_CUT_SCHEMA,
+        "execution_intent_id": "execution-1",
+        "run_id": "run-1",
+        "stage_id": "stage-1",
+        "attempt_id": "attempt-1",
+        "execution_kind": "local_process",
+        "process_or_job_ref": "local:boot:123:start",
+        "terminal_evidence_refs": (digest("receipt"), digest("terminal")),
+        "failure_flags": (),
+        "absence_evidence": ("process_exited", "outputs_quiescent"),
+        "exit_code": 0,
+        "signal": None,
+        "oom": False,
+        "preempted": False,
+        "cancelled": False,
+        "maker_assignment_digest": digest("maker-assignment-absent"),
+        "maker_harness_identity_digest": digest("maker-harness-absent"),
+        "maker_harness_completion_receipt_digest": digest("maker-receipt-absent"),
+        "capability_revocation_receipt_digest": digest("revocation-absent"),
+        "local_executor_identity_digest": digest("local-executor"),
+        "profile_digest": digest("profile"),
+        "scheduler_fingerprint": digest("scheduler-absent"),
+        "sentinel_digest": digest("sentinel-absent"),
+        "output_quiescence_manifest_digest": digest("quiescence"),
+    }
+    values.update(overrides)
+    return ExecutionEvidenceCut(**values)
+
+
+def local_execution_intent(**overrides) -> ExecutionIntent:
+    values = {
+        "execution_intent_id": "local-execution-1",
+        "run_id": "run-1",
+        "stage_id": "stage-1",
+        "attempt_id": "attempt-1",
+        "execution_mode": "local",
+        "argv": ("fake-tool", "--version"),
+        "cwd_digest": domain_hash("vivarium-test-cwd/v1", {}),
+        "environment_digest": domain_hash("vivarium-test-environment/v1", {}),
+        "execution_request_key": "local-request-1",
+    }
+    values.update(overrides)
+    return ExecutionIntent(**values)
+
+
+def agent_only_intent(**overrides) -> ExecutionIntent:
+    values = {
+        "execution_mode": "agent_only",
+        "argv": ("agent-task",),
+        "execution_request_key": "agent-request-1",
+    }
+    values.update(overrides)
+    return local_execution_intent(**values)
+
+
+def agent_only_evidence(**overrides) -> AgentOnlyEvidence:
+    digest = lambda name: domain_hash(f"vivarium-test-agent-{name}/v1", {})
+    values = {
+        "maker_terminal_success": True,
+        "child_count": 0,
+        "capability_revocation_receipt_digest": digest("revocation"),
+        "sealed_output_bundle_digest": digest("output-bundle"),
+        "output_quiescence_manifest_digest": digest("quiescence"),
+        "requested_capabilities": ("workspace_read", "workspace_write"),
+        "observed_capabilities": ("workspace_read", "workspace_write"),
+        "maker_assignment_digest": digest("assignment"),
+        "maker_harness_identity_digest": digest("harness"),
+        "maker_harness_completion_receipt_digest": digest("completion"),
+        "profile_digest": digest("profile"),
+    }
+    values.update(overrides)
+    return AgentOnlyEvidence(**values)
+
+
+class FakeLocalHarness:
+    def __init__(self, *, exit_code=0, signal=None, oom=False):
+        self.main_start_count = 0
+        self.descendant_count = 0
+        self.reaped_descendant_count = 0
+        self.identity_valid = True
+        self.exit_code = exit_code
+        self.signal = signal
+        self.oom = oom
+        self._receipts = {}
+        self._terminal = {}
+
+    def _terminal_value(self, intent):
+        digest = lambda name: domain_hash(
+            f"vivarium-test-local-{name}/v1",
+            {"execution_intent_id": intent.execution_intent_id},
+        )
+        return {
+            "exit_code": self.exit_code,
+            "signal": self.signal,
+            "oom": self.oom,
+            "preempted": False,
+            "cancelled": False,
+            "sentinel_digest": digest("sentinel"),
+            "output_quiescence_manifest_digest": digest("quiescence"),
+            "terminal_evidence_refs": (digest("terminal"), digest("logs")),
+        }
+
+    def start_wrapper(self, intent, persist_receipt_callback, crash_at=None):
+        digest = lambda name: domain_hash(
+            f"vivarium-test-local-{name}/v1",
+            {"execution_intent_id": intent.execution_intent_id},
+        )
+        receipt = ProcessReceipt(
+            intent.execution_intent_id,
+            "boot-test",
+            4101,
+            4101,
+            "boot-test:4101:start-1",
+            digest("stdout"),
+            digest("stderr"),
+        )
+        self._receipts[intent.execution_intent_id] = receipt
+        persist_receipt_callback(receipt)
+        if crash_at == "after_receipt_before_attach":
+            raise RuntimeError(crash_at)
+        self.main_start_count += 1
+        self._terminal[intent.execution_intent_id] = self._terminal_value(intent)
+        if crash_at in {"after_child_spawn", "after_wrapper_exit_before_quiescence"}:
+            self.descendant_count += 1
+            raise RuntimeError(crash_at)
+        return receipt
+
+    def identity_matches(self, receipt):
+        return self.identity_valid and self._receipts.get(
+            receipt.execution_intent_id
+        ) == receipt
+
+    def collect_terminal(self, receipt):
+        return self._terminal.get(receipt.execution_intent_id)
+
+    def reap_descendants(self, receipt):
+        self.reaped_descendant_count += self.descendant_count
+        self.descendant_count = 0
+
+
 def inject_once(store: ProjectStore, point: str) -> None:
     if point not in COMMIT_CRASH_POINTS:
         raise ValueError(point)
@@ -91,7 +241,12 @@ def inject_once(store: ProjectStore, point: str) -> None:
 __all__ = [
     "COMMIT_CRASH_POINTS",
     "FrozenClock",
+    "FakeLocalHarness",
+    "agent_only_evidence",
+    "agent_only_intent",
     "fixture_store_at_revision",
+    "execution_evidence_cut",
+    "local_execution_intent",
     "inject_once",
     "prepared_fixture",
     "valid_prepared_commit",

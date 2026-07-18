@@ -98,6 +98,11 @@
     },
     "overrides": {
       "RUN_LEDGER_GENESIS": {"owner_ledger":"run","action":"run_genesis","required":{"run_id":"string","analysis_state":"analysis_state","attempt_id":"string","branch_id":"string","logical_scope_key":"string","request_key":"string","intent_key":"string","execution_key":"string","local_execution_key":"string","submission_key":"string","operation_keys":"string_list","merge_policy_digest":"digest"},"optional":{"obligations":"list","mutation_clients":"list"}},
+      "AGENT_EXECUTION_COMPLETED": {"owner_ledger":"run","action":"transition","required":{"event_digest":"digest"},"optional":{"execution_intent_id":"string","agent_only_evidence_digest":"digest","attempt_id":"string"}},
+      "LOCAL_EXECUTION_INTENT": {"owner_ledger":"run","action":"transition","required":{"event_digest":"digest"},"optional":{"execution_intent_id":"string","execution_intent_digest":"digest","attempt_id":"string"}},
+      "LOCAL_WRAPPER_ATTACHED": {"owner_ledger":"run","action":"transition","required":{"event_digest":"digest"},"optional":{"execution_intent_id":"string","process_receipt_digest":"digest","attempt_id":"string"}},
+      "LOCAL_START_DEFERRED": {"owner_ledger":"run","action":"transition","required":{"event_digest":"digest"},"optional":{"execution_intent_id":"string","uncertainty_reason":"string"}},
+      "TERMINAL_EVIDENCE_FROZEN": {"owner_ledger":"run","action":"transition","required":{"event_digest":"digest"},"optional":{"execution_intent_id":"string","process_receipt_digest":"digest","execution_evidence_cut_digest":"digest","attempt_id":"string"}},
       "ATTEMPT_DEPENDENCIES_FROZEN": {"owner_ledger":"run","action":"freeze_dependencies","required":{"attempt_id":"string","project_revision":"integer","project_semantic_cut_root":"digest","direct_dependency_heads":"dependency_list","dependency_closure":"dependency_list"},"optional":{}},
       "EVIDENCE_CUT_FROZEN": {"owner_ledger":"run","action":"freeze_evidence","required":{"evidence_cut_id":"string","head_digest":"digest"},"optional":{}},
       "EVIDENCE_BUNDLE_FROZEN": {"owner_ledger":"run","action":"freeze_evidence_bundle","required":{"bundle_id":"string","bundle_digest":"digest","evidence_cut_id":"string","evidence_cut_event_id":"string","evidence_cut_event_hash":"digest","evidence_cut_digest":"digest"},"optional":{}},
