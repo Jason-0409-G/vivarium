@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from skills.vivarium.vivarium_v2.project import COMMIT_CRASH_POINTS, PreparedCommit, ProjectStore
+from skills.vivarium.vivarium_v2.canonical import domain_hash
 
 
 class FrozenClock:
@@ -20,7 +21,7 @@ class InjectedCrash(RuntimeError):
 def fixture_store_at_revision(root: Path, revision: int) -> ProjectStore:
     store = ProjectStore.init(root, FrozenClock("2026-07-18T00:00:00Z"))
     if revision:
-        store.register_run("run-1", analysis_state="COMMITTING")
+        store.register_run("run-1", analysis_state="COLLECTING")
     namespaces = ("truth", "decision", "work", "memory", "run-registry")
     while store.capture()[0].project_revision < revision:
         store.append_fixture_event(
@@ -33,13 +34,33 @@ def valid_prepared_commit(
     store: ProjectStore, *, run_id: str = "run-1", **overrides
 ) -> PreparedCommit:
     if not store.capture()[1]:
-        store.register_run(run_id, analysis_state="COMMITTING")
-    return store.prepare_commit({"run_id": run_id, **overrides})
+        store.register_run(run_id, analysis_state="COLLECTING")
+    return store.prepare_commit(valid_commit_request(run_id, **overrides))
+
+
+def valid_commit_request(run_id: str = "run-1", **overrides):
+    tx_id = overrides.get("commit_tx_id", "commit-1")
+    digest = lambda name: domain_hash(f"vivarium-test-{name}/v1", {"tx": tx_id})
+    return {
+        "run_id": run_id,
+        "commit_tx_id": tx_id,
+        "evidence_bundle_digest": digest("bundle"),
+        "completion_claim_digest": digest("claim"),
+        "completion_proof_digest": digest("proof"),
+        "validator_report_digest": digest("validator"),
+        "review_digests": (digest("review"),),
+        "quorum_decision_digest": digest("quorum"),
+        "budget_digest": digest("budget"),
+        "checker_quorum_valid": True,
+        "budget_available": True,
+        "completion_success": True,
+        **overrides,
+    }
 
 
 def prepared_fixture(root: Path) -> ProjectStore:
     store = ProjectStore.init(root, FrozenClock("2026-07-18T00:00:00Z"))
-    store.register_run("run-1", analysis_state="COMMITTING")
+    store.register_run("run-1", analysis_state="COLLECTING")
     prepared = valid_prepared_commit(store)
     store._test_prepared_commit = prepared
     return store
@@ -74,4 +95,5 @@ __all__ = [
     "inject_once",
     "prepared_fixture",
     "valid_prepared_commit",
+    "valid_commit_request",
 ]

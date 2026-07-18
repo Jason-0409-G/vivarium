@@ -208,10 +208,12 @@ def _reduce_project_cut(
     overlays: list[ProjectOverlay] = []
     revision_actions: list[ProjectRevisionAction] = []
     branch_heads: dict[str, tuple[str, int]] = {}
-    branch_ancestry: dict[str, set[str]] = {}
+    branch_ancestry: dict[str, tuple[str, ...]] = {}
     open_recheck_scopes: dict[
         tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]
     ] = {}
+    task4_commits: dict[str, tuple[str, str, str, str]] = {}
+    opened_observations: dict[tuple[str, str], tuple[str, str]] = {}
     for revision, namespace, item, payload, contract in semantic:
         task4_commit_fields = {
             "branch_id",
@@ -274,8 +276,18 @@ def _reduce_project_cut(
             branch_heads[branch_id] = (
                 payload["new_state_snapshot_id"], payload["new_generation"]
             )
-            branch_ancestry.setdefault(branch_id, {ZERO_HASH}).add(
-                payload["new_state_snapshot_id"]
+            branch_ancestry[branch_id] = (
+                *branch_ancestry.get(branch_id, (ZERO_HASH,)),
+                payload["new_state_snapshot_id"],
+            )
+            commit_tx_id = _require_string(payload, "commit_tx_id")
+            if commit_tx_id in task4_commits:
+                raise IntegrityError("stage commit transaction IDs must be unique")
+            task4_commits[commit_tx_id] = (
+                _require_string(payload, "run_id"),
+                _require_string(payload, "object_id"),
+                branch_id,
+                _require_string(payload, "new_state_snapshot_id"),
             )
         elif item.event_type == "ROLLBACK_COMMITTED":
             branch_id = _require_string(payload, "branch_id")
@@ -286,12 +298,16 @@ def _reduce_project_cut(
                 or payload["new_generation"] != current[1] + 1
                 or payload["object_head"] != payload["target_checkpoint_id"]
                 or payload["target_checkpoint_id"]
-                not in branch_ancestry.get(branch_id, {ZERO_HASH})
+                not in branch_ancestry.get(branch_id, (ZERO_HASH,))
             ):
                 raise IntegrityError("rollback branch CAS/ancestry is inconsistent")
             branch_heads[branch_id] = (
                 payload["target_checkpoint_id"], payload["new_generation"]
             )
+            lineage = branch_ancestry.get(branch_id, (ZERO_HASH,))
+            branch_ancestry[branch_id] = lineage[
+                : lineage.index(payload["target_checkpoint_id"]) + 1
+            ]
         elif item.event_type == "BRANCH_FORKED":
             branch_id = _require_string(payload, "branch_id")
             parent_id = _require_string(payload, "parent_branch_id")
@@ -301,15 +317,14 @@ def _reduce_project_cut(
                 or payload["initial_generation"] != 0
                 or payload["parent_state_root"] != parent[0]
                 or payload["parent_checkpoint_id"]
-                not in branch_ancestry.get(parent_id, {ZERO_HASH})
+                not in branch_ancestry.get(parent_id, (ZERO_HASH,))
                 or payload["object_head"] != payload["parent_checkpoint_id"]
             ):
                 raise IntegrityError("fork parent binding is inconsistent")
             branch_heads[branch_id] = (payload["object_head"], 0)
-            branch_ancestry[branch_id] = {
-                *branch_ancestry.get(parent_id, {ZERO_HASH}),
-                payload["object_head"],
-            }
+            parent_lineage = branch_ancestry.get(parent_id, (ZERO_HASH,))
+            checkpoint_index = parent_lineage.index(payload["parent_checkpoint_id"])
+            branch_ancestry[branch_id] = parent_lineage[: checkpoint_index + 1]
         active_object = _project_object(namespace, payload)
         mutates_object = contract.action != "project_recheck"
         if mutates_object:
@@ -418,6 +433,57 @@ def _reduce_project_cut(
                     if item.event_type == "COMPLETION_RECHECK_OPENED":
                         if scope_key in open_recheck_scopes:
                             raise IntegrityError("recheck transaction may only be opened once")
+                        identity_fields = {
+                            "observation_id",
+                            "observation_digest",
+                            "target_commit_tx_id",
+                        }
+                        present_identity = identity_fields & set(payload)
+                        active_task4_targets = {
+                            commit_tx_id
+                            for commit_tx_id, record in task4_commits.items()
+                            if record[0] == run_id
+                            and record[1] == target_object_id
+                            and record[3]
+                            in branch_ancestry.get(record[2], (ZERO_HASH,))
+                        }
+                        if present_identity and present_identity != identity_fields:
+                            raise IntegrityError("recheck observation identity is incomplete")
+                        if active_task4_targets and present_identity != identity_fields:
+                            raise IntegrityError(
+                                "Task 4 recheck lacks its durable observation identity"
+                            )
+                        if present_identity:
+                            observation_id = _require_string(payload, "observation_id")
+                            observation_digest = _require_digest(
+                                payload, "observation_digest"
+                            )
+                            target_commit_tx_id = _require_string(
+                                payload, "target_commit_tx_id"
+                            )
+                            record = task4_commits.get(target_commit_tx_id)
+                            if (
+                                target_namespace != "work"
+                                or record is None
+                                or record[0] != run_id
+                                or record[1] != target_object_id
+                                or record[3]
+                                not in branch_ancestry.get(record[2], (ZERO_HASH,))
+                                or target_commit_tx_id not in active_task4_targets
+                            ):
+                                raise IntegrityError(
+                                    "recheck observation targets a non-active commit"
+                                )
+                            observation_key = (run_id, observation_id)
+                            observation_binding = (
+                                observation_digest,
+                                target_commit_tx_id,
+                            )
+                            if observation_key in opened_observations:
+                                raise IntegrityError(
+                                    "recheck observation may only be opened once"
+                                )
+                            opened_observations[observation_key] = observation_binding
                         affected_object_ids, affected_run_ids = _affected_recheck_scope(
                             objects, target_namespace, target_object_id, run_id
                         )

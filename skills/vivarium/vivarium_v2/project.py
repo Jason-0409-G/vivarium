@@ -81,6 +81,8 @@ class PreparedCommit:
     execution_evidence_cut_digest: str
     validator_report_digest: str
     review_digests: tuple[str, ...]
+    quorum_decision_digest: str
+    budget_digest: str
     context_project_revision: int
     knowledge_dependency_vector_digest: str
     expected_dependency_closure_digest: str
@@ -324,34 +326,47 @@ class ProjectStore:
         if not run_id or "/" in run_id or ".." in run_id:
             raise IntegrityError("run_id is not a safe stable identifier")
         with self._ordered_locks(branch_id=branch_id):
-            if (self.root / "runs" / run_id).exists():
-                raise IntegrityError("run is already registered or partially created")
-            (self.root / "runs" / run_id).mkdir(parents=True)
-            runs_fd = os.open(self.root / "runs", os.O_RDONLY)
-            try:
-                os.fsync(runs_fd)
-            finally:
-                os.close(runs_fd)
-            policy_digest = reduce_project_cut(self._prefixes()).locked_policy_digest
-            genesis = self._append(
-                self._run_ledger(run_id),
-                "RUN_LEDGER_GENESIS",
-                {
-                    "run_id": run_id,
-                    "analysis_state": analysis_state,
-                    "attempt_id": "attempt-1",
-                    "branch_id": branch_id,
-                    "logical_scope_key": f"scope:{run_id}",
-                    "request_key": f"request:{run_id}:1",
-                    "intent_key": f"intent:{run_id}:1",
-                    "execution_key": f"execution:{run_id}:1",
-                    "local_execution_key": f"local:{run_id}:1",
-                    "submission_key": f"submission:{run_id}:1",
-                    "operation_keys": [],
-                    "merge_policy_digest": policy_digest,
-                },
-                f"run-genesis-{run_id}",
-            )
+            run_dir = self.root / "runs" / run_id
+            if run_dir.exists():
+                events = tuple(self._run_ledger(run_id).recover().events)
+                already_registered = run_id in self._registered_run_ids()
+                if (
+                    already_registered
+                    or len(events) != 1
+                    or events[0].event_type != "RUN_LEDGER_GENESIS"
+                    or events[0].payload.get("run_id") != run_id
+                ):
+                    raise IntegrityError("run is already registered or partial bytes mismatch")
+                genesis = events[0]
+                analysis_state = genesis.payload["analysis_state"]
+                branch_id = genesis.payload["branch_id"]
+            else:
+                run_dir.mkdir(parents=True)
+                runs_fd = os.open(self.root / "runs", os.O_RDONLY)
+                try:
+                    os.fsync(runs_fd)
+                finally:
+                    os.close(runs_fd)
+                policy_digest = reduce_project_cut(self._prefixes()).locked_policy_digest
+                genesis = self._append(
+                    self._run_ledger(run_id),
+                    "RUN_LEDGER_GENESIS",
+                    {
+                        "run_id": run_id,
+                        "analysis_state": analysis_state,
+                        "attempt_id": "attempt-1",
+                        "branch_id": branch_id,
+                        "logical_scope_key": f"scope:{run_id}",
+                        "request_key": f"request:{run_id}:1",
+                        "intent_key": f"intent:{run_id}:1",
+                        "execution_key": f"execution:{run_id}:1",
+                        "local_execution_key": f"local:{run_id}:1",
+                        "submission_key": f"submission:{run_id}:1",
+                        "operation_keys": [],
+                        "merge_policy_digest": policy_digest,
+                    },
+                    f"run-genesis-{run_id}",
+                )
             registration = {
                 "run_id": run_id,
                 "ledger_id": genesis.ledger_id,
@@ -398,18 +413,23 @@ class ProjectStore:
                 )
             elif event.event_type == "ROLLBACK_COMMITTED":
                 prior = heads[payload["branch_id"]]
+                target_index = prior.ancestry.index(payload["target_checkpoint_id"])
                 heads[payload["branch_id"]] = replace(
                     prior,
                     state_snapshot_id=payload["target_checkpoint_id"],
                     generation=payload["new_generation"],
+                    ancestry=prior.ancestry[: target_index + 1],
                 )
             elif event.event_type == "BRANCH_FORKED":
                 parent = heads[payload["parent_branch_id"]]
+                checkpoint_index = parent.ancestry.index(
+                    payload["parent_checkpoint_id"]
+                )
                 heads[payload["branch_id"]] = BranchHead(
                     payload["branch_id"],
                     payload["parent_checkpoint_id"],
                     0,
-                    parent.ancestry,
+                    parent.ancestry[: checkpoint_index + 1],
                     payload["parent_branch_id"],
                     payload["specification_delta_digest"],
                 )
@@ -422,6 +442,20 @@ class ProjectStore:
             raise IntegrityError("unknown branch") from exc
 
     def _normalize_commit(self, request: Mapping[str, Any]) -> PreparedCommit:
+        required_authority = {
+            "evidence_bundle_digest",
+            "completion_claim_digest",
+            "completion_proof_digest",
+            "validator_report_digest",
+            "review_digests",
+            "quorum_decision_digest",
+            "budget_digest",
+            "checker_quorum_valid",
+            "budget_available",
+            "completion_success",
+        }
+        if not required_authority <= set(request):
+            raise IntegrityError("commit request lacks explicit durable authority fields")
         cut, locals_ = self.capture()
         run_id = str(request.get("run_id") or (locals_[0].run_id if len(locals_) == 1 else ""))
         if not run_id:
@@ -497,14 +531,16 @@ class ProjectStore:
             str(request.get("expected_work_root", cut.active_work_root)),
             str(request.get("new_work_root", next_work_root)),
             digest("acceptance_contract_digest"),
-            digest("evidence_bundle_digest"),
+            str(request["evidence_bundle_digest"]),
             str(request.get("payload_root_digest", artifact_digest)),
-            digest("completion_claim_digest"),
-            digest("completion_proof_digest"),
+            str(request["completion_claim_digest"]),
+            str(request["completion_proof_digest"]),
             str(request.get("completion_grade", "L1")),
             digest("execution_evidence_cut_digest"),
-            digest("validator_report_digest"),
-            tuple(sorted(request.get("review_digests", (digest("review_digest"),)))),
+            str(request["validator_report_digest"]),
+            tuple(sorted(request["review_digests"])),
+            str(request["quorum_decision_digest"]),
+            str(request["budget_digest"]),
             int(request.get("context_project_revision", cut.project_revision)),
             str(
                 request.get(
@@ -519,9 +555,9 @@ class ProjectStore:
                 )
             ),
             dependencies,
-            bool(request.get("checker_quorum_valid", True)),
-            bool(request.get("budget_available", True)),
-            bool(request.get("completion_success", True)),
+            bool(request["checker_quorum_valid"]),
+            bool(request["budget_available"]),
+            bool(request["completion_success"]),
             str(request.get("locked_policy_digest", cut.locked_policy_digest)),
             str(request.get("evidence_cut_id", f"cut:{tx_id}")),
             str(request.get("evidence_cut_digest", digest("evidence_cut_digest"))),
@@ -540,39 +576,210 @@ class ProjectStore:
                     prepared, prepare_event_id="", prepare_event_hash=""
                 ):
                     raise IntegrityError("commit_tx_id is already bound to different bytes")
-                return self._with_prepare_authority(stored)
+                return self._resume_preparation(stored)
             self._append(
                 self._transaction_ledger(),
                 "COMMIT_INTENT",
                 self._prepared_payload(prepared),
                 prepared.commit_tx_id,
             )
-            self._write_artifact(prepared)
-            run_ledger = self._run_ledger(prepared.run_id)
-            self._append(
-                run_ledger,
-                "EVIDENCE_CUT_FROZEN",
-                {"evidence_cut_id": prepared.evidence_cut_id, "head_digest": prepared.evidence_cut_digest},
-                prepared.commit_tx_id,
+            return self._resume_preparation(prepared)
+
+    def _resume_preparation(self, prepared: PreparedCommit) -> PreparedCommit:
+        if (
+            not prepared.completion_success
+            or not prepared.checker_quorum_valid
+            or not prepared.budget_available
+        ):
+            raise IntegrityError("commit intent does not authorize a success preparation")
+        self._write_artifact(prepared)
+        run_ledger = self._run_ledger(prepared.run_id)
+
+        def append_once(event_type: str, payload: dict[str, Any]) -> Event:
+            existing = next(
+                (
+                    event
+                    for event in run_ledger.recover().events
+                    if event.tx_id == prepared.commit_tx_id
+                    and event.event_type == event_type
+                ),
+                None,
             )
-            prepare_event = self._append(
-                run_ledger,
-                "COMMIT_PREPARED",
+            if existing is not None:
+                if existing.payload != payload:
+                    raise IntegrityError("resumed commit authority bytes do not match")
+                return existing
+            return self._append(run_ledger, event_type, payload, prepared.commit_tx_id)
+
+        local = reduce_run(tuple(run_ledger.recover().events))
+        evidence = append_once(
+            "EVIDENCE_CUT_FROZEN",
+            {
+                "evidence_cut_id": prepared.evidence_cut_id,
+                "head_digest": prepared.evidence_cut_digest,
+            },
+        )
+        authority_chain_types = {
+            "EVIDENCE_BUNDLE_FROZEN",
+            "COMPLETION_CLASSIFIED",
+            "COMPLETION_PROOF_RECORDED",
+            "COMPLETION_SUCCESS_PROVEN",
+            "VALIDATOR_REPORT_SEALED",
+            "VALIDATION_PASSED",
+            "CHECKER_ALLOCATED",
+            "CHECKER_REVIEW_SEALED",
+            "QUORUM_DECISION_SEALED",
+            "CHECKER_QUORUM_PASSED",
+        }
+        authority_chain_started = any(
+            event.tx_id == prepared.commit_tx_id
+            and event.event_type in authority_chain_types
+            for event in run_ledger.recover().events
+        )
+        if local.analysis_state == AnalysisState.COLLECTING or authority_chain_started:
+            bundle = append_once(
+                "EVIDENCE_BUNDLE_FROZEN",
                 {
-                    "commit_tx_id": prepared.commit_tx_id,
+                    "bundle_id": f"bundle:{prepared.commit_tx_id}",
+                    "bundle_digest": prepared.evidence_bundle_digest,
+                    "evidence_cut_id": prepared.evidence_cut_id,
+                    "evidence_cut_event_id": evidence.event_id,
+                    "evidence_cut_event_hash": evidence.event_hash,
+                    "evidence_cut_digest": prepared.evidence_cut_digest,
+                },
+            )
+            classification_event = append_once(
+                "COMPLETION_CLASSIFIED",
+                {
+                    "classification_id": f"classification:{prepared.commit_tx_id}",
                     "evidence_cut_id": prepared.evidence_cut_id,
                     "evidence_cut_digest": prepared.evidence_cut_digest,
-                    "origin_state": "COMMITTING",
+                    "outcome": "success",
                 },
-                prepared.commit_tx_id,
             )
-            self._fault("prepare_fsync")
-            reduce_run(tuple(run_ledger.recover().events))
-            return replace(
-                prepared,
-                prepare_event_id=prepare_event.event_id,
-                prepare_event_hash=prepare_event.event_hash,
+            classified = reduce_run(tuple(run_ledger.recover().events))
+            classification = classified.completion_classifications[-1]
+            proof = append_once(
+                "COMPLETION_PROOF_RECORDED",
+                {
+                    "completion_proof_id": f"proof:{prepared.commit_tx_id}",
+                    "completion_proof_digest": prepared.completion_proof_digest,
+                    "classification_id": classification.classification_id,
+                    "classification_event_id": classification_event.event_id,
+                    "classification_event_hash": classification_event.event_hash,
+                    "classification_digest": classification.classification_digest,
+                    "evidence_cut_id": prepared.evidence_cut_id,
+                    "evidence_cut_digest": prepared.evidence_cut_digest,
+                },
             )
+            append_once(
+                "COMPLETION_SUCCESS_PROVEN",
+                {
+                    "completion_proof_id": f"proof:{prepared.commit_tx_id}",
+                    "completion_proof_event_id": proof.event_id,
+                    "completion_proof_event_hash": proof.event_hash,
+                    "completion_proof_digest": prepared.completion_proof_digest,
+                    "bundle_id": f"bundle:{prepared.commit_tx_id}",
+                    "bundle_event_id": bundle.event_id,
+                    "bundle_event_hash": bundle.event_hash,
+                    "bundle_digest": prepared.evidence_bundle_digest,
+                },
+            )
+            report = append_once(
+                "VALIDATOR_REPORT_SEALED",
+                {
+                    "validator_report_id": f"validator:{prepared.commit_tx_id}",
+                    "validator_report_digest": prepared.validator_report_digest,
+                    "completion_proof_id": f"proof:{prepared.commit_tx_id}",
+                    "completion_proof_event_id": proof.event_id,
+                    "completion_proof_event_hash": proof.event_hash,
+                    "completion_proof_digest": prepared.completion_proof_digest,
+                    "bundle_id": f"bundle:{prepared.commit_tx_id}",
+                    "bundle_event_id": bundle.event_id,
+                    "bundle_event_hash": bundle.event_hash,
+                    "bundle_digest": prepared.evidence_bundle_digest,
+                    "validation_outcome": "pass",
+                },
+            )
+            append_once(
+                "VALIDATION_PASSED",
+                {
+                    "validator_report_id": f"validator:{prepared.commit_tx_id}",
+                    "validator_report_event_id": report.event_id,
+                    "validator_report_event_hash": report.event_hash,
+                    "validator_report_digest": prepared.validator_report_digest,
+                },
+            )
+            append_once(
+                "CHECKER_ALLOCATED",
+                {
+                    "event_digest": domain_hash(
+                        "vivarium-checker-allocation/v1", {"tx": prepared.commit_tx_id}
+                    )
+                },
+            )
+            review = append_once(
+                "CHECKER_REVIEW_SEALED",
+                {
+                    "checker_review_id": f"review:{prepared.commit_tx_id}",
+                    "checker_review_digest": prepared.review_digests[0],
+                    "validator_report_id": f"validator:{prepared.commit_tx_id}",
+                    "validator_report_event_id": report.event_id,
+                    "validator_report_event_hash": report.event_hash,
+                    "validator_report_digest": prepared.validator_report_digest,
+                    "review_outcome": "pass",
+                },
+            )
+            quorum = append_once(
+                "QUORUM_DECISION_SEALED",
+                {
+                    "quorum_decision_id": f"quorum:{prepared.commit_tx_id}",
+                    "quorum_decision_digest": prepared.quorum_decision_digest,
+                    "validator_report_id": f"validator:{prepared.commit_tx_id}",
+                    "validator_report_event_id": report.event_id,
+                    "validator_report_event_hash": report.event_hash,
+                    "validator_report_digest": prepared.validator_report_digest,
+                    "checker_review_id": f"review:{prepared.commit_tx_id}",
+                    "checker_review_event_id": review.event_id,
+                    "checker_review_event_hash": review.event_hash,
+                    "checker_review_digest": prepared.review_digests[0],
+                    "quorum_outcome": "pass",
+                    "budget_available": prepared.budget_available,
+                    "budget_digest": prepared.budget_digest,
+                    "completion_claim_digest": prepared.completion_claim_digest,
+                },
+            )
+            append_once(
+                "CHECKER_QUORUM_PASSED",
+                {
+                    "quorum_decision_id": f"quorum:{prepared.commit_tx_id}",
+                    "quorum_decision_event_id": quorum.event_id,
+                    "quorum_decision_event_hash": quorum.event_hash,
+                    "quorum_decision_digest": prepared.quorum_decision_digest,
+                },
+            )
+            local = reduce_run(tuple(run_ledger.recover().events))
+        if local.analysis_state not in {
+            AnalysisState.COMMITTING,
+            AnalysisState.RECOVERY_REQUIRED,
+        }:
+            raise IntegrityError("commit authority chain cannot reach preparation")
+        prepare_event = append_once(
+            "COMMIT_PREPARED",
+            {
+                "commit_tx_id": prepared.commit_tx_id,
+                "evidence_cut_id": prepared.evidence_cut_id,
+                "evidence_cut_digest": prepared.evidence_cut_digest,
+                "origin_state": "COMMITTING",
+            },
+        )
+        self._fault("prepare_fsync")
+        reduce_run(tuple(run_ledger.recover().events))
+        return replace(
+            prepared,
+            prepare_event_id=prepare_event.event_id,
+            prepare_event_hash=prepare_event.event_hash,
+        )
 
     def _write_artifact(self, prepared: PreparedCommit) -> None:
         data = base64.b64decode(prepared.artifact_base64)
@@ -582,12 +789,20 @@ class ProjectStore:
                 raise IntegrityError("content-addressed artifact bytes disagree")
             return
         staging = self.root / "artifacts" / f".staging-{prepared.commit_tx_id}-{len(self._transactions())}"
-        with staging.open("xb") as handle:
-            handle.write(data)
-            self._fault("artifact_write")
-            handle.flush()
-            os.fsync(handle.fileno())
-            self._fault("artifact_fsync")
+        if staging.exists():
+            with staging.open("rb") as handle:
+                if handle.read() != data:
+                    raise IntegrityError("staged artifact bytes disagree on recovery")
+                self._fault("artifact_write")
+                os.fsync(handle.fileno())
+                self._fault("artifact_fsync")
+        else:
+            with staging.open("xb") as handle:
+                handle.write(data)
+                self._fault("artifact_write")
+                handle.flush()
+                os.fsync(handle.fileno())
+                self._fault("artifact_fsync")
         os.replace(staging, final)
         directory_fd = os.open(final.parent, os.O_RDONLY)
         try:
@@ -682,19 +897,90 @@ class ProjectStore:
             or authority.evidence_cut_digest != prepared.evidence_cut_digest
         ):
             raise IntegrityError("durable prepare authority is invalid")
+        attempt_id = local.active_attempt_id
+        classification = next(
+            (
+                item
+                for item in reversed(local.completion_classifications)
+                if item.attempt_id == attempt_id
+                and item.evidence_cut_id == prepared.evidence_cut_id
+                and item.evidence_cut_digest == prepared.evidence_cut_digest
+            ),
+            None,
+        )
+        proof = next(
+            (
+                item
+                for item in reversed(local.completion_proof_heads)
+                if item.attempt_id == attempt_id
+                and item.evidence_cut_id == prepared.evidence_cut_id
+                and item.evidence_cut_digest == prepared.evidence_cut_digest
+            ),
+            None,
+        )
+        report = next(
+            (
+                item
+                for item in reversed(local.validator_report_heads)
+                if item.attempt_id == attempt_id
+                and proof is not None
+                and item.completion_proof_id == proof.completion_proof_id
+            ),
+            None,
+        )
+        reviews = tuple(
+            item
+            for item in local.checker_review_heads
+            if item.attempt_id == attempt_id
+            and report is not None
+            and item.validator_report_id == report.validator_report_id
+            and item.review_outcome == "pass"
+        )
+        quorum = next(
+            (
+                item
+                for item in reversed(local.quorum_decision_heads)
+                if item.attempt_id == attempt_id
+                and report is not None
+                and item.validator_report_id == report.validator_report_id
+                and item.quorum_outcome == "pass"
+            ),
+            None,
+        )
+        quorum_event = next(
+            (
+                event
+                for event in self._run_ledger(prepared.run_id).recover().events
+                if quorum is not None and event.event_id == quorum.event_id
+            ),
+            None,
+        )
+        if (
+            local.analysis_state
+            not in {AnalysisState.COMMITTING, AnalysisState.RECOVERY_REQUIRED}
+            or classification is None
+            or classification.outcome != "success"
+            or proof is None
+            or proof.completion_proof_digest != prepared.completion_proof_digest
+            or report is None
+            or report.validation_outcome != "pass"
+            or report.validator_report_digest != prepared.validator_report_digest
+            or tuple(sorted(item.checker_review_digest for item in reviews))
+            != prepared.review_digests
+            or quorum is None
+            or quorum.quorum_decision_digest != prepared.quorum_decision_digest
+            or quorum_event is None
+            or quorum_event.payload.get("budget_available") is not True
+            or quorum_event.payload.get("budget_digest") != prepared.budget_digest
+            or quorum_event.payload.get("completion_claim_digest")
+            != prepared.completion_claim_digest
+        ):
+            raise IntegrityError("active attempt lacks durable commit authority")
         artifact = self.root / "artifacts" / f"{prepared.artifact_digest[7:]}.artifact"
         if not artifact.exists() or domain_hash(
             "vivarium-artifact/v1", base64.b64encode(artifact.read_bytes()).decode("ascii")
         ) != prepared.artifact_digest:
             raise IntegrityError("artifact durability validation failed")
-        if not prepared.completion_success or not prepared.completion_proof_digest:
-            raise IntegrityError("completion proof is not success-authoritative")
-        if not prepared.validator_report_digest:
-            raise IntegrityError("validator seal is invalid")
-        if not prepared.checker_quorum_valid or not prepared.review_digests:
-            raise IntegrityError("Checker quorum is invalid")
-        if not prepared.budget_available:
-            raise IntegrityError("commit budget is exhausted")
         return cut, local
 
     def complete_commit(self, commit: PreparedCommit | str) -> Event:
@@ -845,7 +1131,7 @@ class ProjectStore:
         recheck_tx_id = f"recheck:{observation_id}"
         oversize = len(body) > self.inbox_limit
         encoded = base64.b64encode(body[: self.inbox_limit]).decode("ascii")
-        commit_event = next(
+        candidate = next(
             (
                 event
                 for event in reversed(self._project_ledger("work").recover().events)
@@ -855,32 +1141,85 @@ class ProjectStore:
             ),
             None,
         )
-        if commit_event is None:
+        if candidate is None:
             raise IntegrityError("observation target is not an active committed object")
         with self._ordered_locks(
-            branch_id=commit_event.payload.get("branch_id", "branch-1"),
+            branch_id=candidate.payload.get("branch_id", "branch-1"),
             execution_id=recheck_tx_id,
         ):
+            commit_event = next(
+                (
+                    event
+                    for event in reversed(self._project_ledger("work").recover().events)
+                    if event.event_type == "STAGE_COMMITTED"
+                    and event.payload.get("run_id") == run_id
+                    and event.payload.get("object_id") == observed_object_id
+                ),
+                None,
+            )
+            if commit_event is None:
+                raise IntegrityError("observation target is not an active committed object")
+            branch_id = commit_event.payload.get("branch_id", "branch-1")
+            branch = self.branch_head(branch_id)
+            cut = reduce_project_cut(self._prefixes())
+            active_object = next(
+                (
+                    item
+                    for item in cut.active_object_heads
+                    if item.namespace == "work"
+                    and item.object_id == observed_object_id
+                    and item.owner_run_id == run_id
+                ),
+                None,
+            )
+            if (
+                commit_event.payload.get("new_state_snapshot_id") not in branch.ancestry
+                or active_object is None
+                or active_object.object_head != commit_event.payload.get("object_head")
+            ):
+                raise IntegrityError("observation target is not an active committed object")
+            payload = {
+                "observation_id": observation_id,
+                "observed_object_id": observed_object_id,
+                "observation_digest": digest,
+                "canonical_raw_base64": encoded,
+                "observed_size": len(body),
+                "oversize": oversize,
+                "source": source,
+                "authority": authority,
+                "target_commit_tx_id": commit_event.payload["commit_tx_id"],
+                "target_completion_proof_digest": commit_event.payload[
+                    "completion_proof_digest"
+                ],
+                "recheck_tx_id": recheck_tx_id,
+                "truncation_evidence_digest": domain_hash(
+                    "vivarium-inbox-truncation/v1",
+                    {"digest": digest, "size": len(body), "limit": self.inbox_limit},
+                ),
+            }
+            existing = next(
+                (
+                    item
+                    for item in self._run_ledger(run_id).recover().events
+                    if item.event_type == "POSTCOMMIT_OBSERVATION_INBOXED"
+                    and item.payload.get("observation_id") == observation_id
+                ),
+                None,
+            )
+            if existing is not None:
+                if existing.payload != payload:
+                    raise IntegrityError("observation ID was reused with different content")
+                return InboxReceipt(
+                    observation_id,
+                    recheck_tx_id,
+                    existing,
+                    "ESCALATED" if oversize else "BLOCKED_POSTCOMMIT_INTAKE",
+                    oversize,
+                )
             event = self._append(
                 self._run_ledger(run_id),
                 "POSTCOMMIT_OBSERVATION_INBOXED",
-                {
-                    "observation_id": observation_id,
-                    "observed_object_id": observed_object_id,
-                    "observation_digest": digest,
-                    "canonical_raw_base64": encoded,
-                    "observed_size": len(body),
-                    "oversize": oversize,
-                    "source": source,
-                    "authority": authority,
-                    "target_commit_tx_id": commit_event.payload["commit_tx_id"],
-                    "target_completion_proof_digest": commit_event.payload["completion_proof_digest"],
-                    "recheck_tx_id": recheck_tx_id,
-                    "truncation_evidence_digest": domain_hash(
-                        "vivarium-inbox-truncation/v1",
-                        {"digest": digest, "size": len(body), "limit": self.inbox_limit},
-                    ),
-                },
+                payload,
                 recheck_tx_id,
             )
         return InboxReceipt(
@@ -953,6 +1292,9 @@ class ProjectStore:
                     "prepare_event_hash": prepared.prepare_event_hash,
                     "evidence_cut_id": prepared.evidence_cut_id,
                     "evidence_cut_digest": prepared.evidence_cut_digest,
+                    "observation_id": observation_id,
+                    "observation_digest": inbox.payload["observation_digest"],
+                    "target_commit_tx_id": commit.payload["commit_tx_id"],
                 },
                 recheck_tx_id,
             )
@@ -982,10 +1324,8 @@ class ProjectStore:
                 raise IntegrityError("rollback branch CAS failed")
             if target_checkpoint_id not in branch.ancestry:
                 raise IntegrityError("rollback target is not an ancestor checkpoint")
-            invalidated = set(invalidated_roots)
-            if not invalidated:
-                target_index = branch.ancestry.index(target_checkpoint_id)
-                invalidated.update(branch.ancestry[target_index + 1 :])
+            target_index = branch.ancestry.index(target_checkpoint_id)
+            invalidated = set(branch.ancestry[target_index + 1 :])
             affected_run_ids = tuple(
                 sorted(
                     {
@@ -1070,6 +1410,16 @@ class ProjectStore:
         )
 
     def recover(self) -> RecoveryState:
+        registered = set(self._registered_run_ids())
+        for run_dir in sorted((self.root / "runs").iterdir()):
+            if run_dir.is_dir() and run_dir.name not in registered:
+                events = tuple(self._run_ledger(run_dir.name).recover().events)
+                if len(events) == 1 and events[0].event_type == "RUN_LEDGER_GENESIS":
+                    self.register_run(
+                        run_dir.name,
+                        analysis_state=events[0].payload["analysis_state"],
+                        branch_id=events[0].payload["branch_id"],
+                    )
         for intent in self._transactions("COMMIT_INTENT"):
             prepared = self._with_prepare_authority(self._prepared_from_payload(intent.payload))
             prior_run_commit = any(
@@ -1080,7 +1430,9 @@ class ProjectStore:
             )
             if prior_run_commit:
                 continue
-            if prepared.prepare_event_id and self._outcome(prepared.commit_tx_id) is None:
+            if not prepared.prepare_event_id:
+                prepared = self.prepare_commit(prepared)
+            if self._outcome(prepared.commit_tx_id) is None:
                 try:
                     self.complete_commit(prepared)
                 except IntegrityError:

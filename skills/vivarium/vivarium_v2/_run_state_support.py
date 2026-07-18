@@ -290,6 +290,7 @@ def _run_local_projection_v2(
     obligations: tuple[ObligationRecord, ...],
     clients: tuple[MutationClientRecord, ...],
     blockers: tuple[str, ...],
+    escalations: tuple[str, ...],
     reachable: tuple[RunEventReference, ...],
     merge_policy_digest: str,
 ) -> dict[str, Any]:
@@ -331,6 +332,7 @@ def _run_local_projection_v2(
         "obligations": [_obligation_projection(item) for item in obligations],
         "mutation_clients": [_client_projection(item) for item in clients],
         "postcommit_intake_blockers": list(blockers),
+        "postcommit_escalations": list(escalations),
         "reachable_run_events": [
             {"event_id": item.event_id, "event_hash": item.event_hash} for item in reachable
         ],

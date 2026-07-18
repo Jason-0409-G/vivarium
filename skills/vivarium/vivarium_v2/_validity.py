@@ -382,6 +382,10 @@ def reduce_run_validity(
     }:
         set_effective_state(AnalysisState.STALE_CONTEXT)
         active = active_attempt()
+    if local.postcommit_escalations:
+        set_effective_state(AnalysisState.ESCALATED)
+        operational_escalated = True
+        active = active_attempt()
     relevant_root = domain_hash(
         RELEVANT_PROJECT_INPUT_DOMAIN,
         {

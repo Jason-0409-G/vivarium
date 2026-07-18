@@ -72,6 +72,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
     obligations = _parse_initial_obligations(genesis_payload)
     clients = _parse_initial_clients(genesis_payload)
     blockers: set[str] = set()
+    escalations: set[str] = set()
 
     def active() -> AttemptState:
         return attempts[active_attempt_id]
@@ -188,10 +189,14 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             if observation_id in blockers:
                 raise IntegrityError("postcommit observation IDs must be unique")
             blockers.add(observation_id)
+            if payload.get("oversize") is True:
+                escalations.add(observation_id)
         elif action == "open_observation":
             observation_id = _require_string(payload, "observation_id")
             if observation_id not in blockers:
                 raise IntegrityError("opened observation is not inboxed")
+            if observation_id in escalations:
+                raise IntegrityError("oversize observation cannot leave fail-closed intake")
             blockers.remove(observation_id)
         elif action == "classify_completion":
             classification_id = _require_string(payload, "classification_id")
@@ -592,6 +597,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
     ordered_obligations = tuple(sorted(obligations.values()))
     ordered_clients = tuple(sorted(clients.values()))
     ordered_blockers = tuple(sorted(blockers))
+    ordered_escalations = tuple(sorted(escalations))
     reachable = tuple(RunEventReference(item.event_id, item.event_hash) for item in prefix)
     projection = _run_local_projection_v2(
         run_id=run_id,
@@ -612,6 +618,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
         obligations=ordered_obligations,
         clients=ordered_clients,
         blockers=ordered_blockers,
+        escalations=ordered_escalations,
         reachable=reachable,
         merge_policy_digest=merge_policy_digest,
     )
@@ -639,6 +646,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
         ordered_obligations,
         ordered_clients,
         ordered_blockers,
+        ordered_escalations,
         reachable,
         merge_policy_digest,
         RUN_LOCAL_REDUCER_DIGEST,

@@ -595,6 +595,7 @@ class RunLocalState:
     obligations: tuple[ObligationRecord, ...]
     mutation_clients: tuple[MutationClientRecord, ...]
     postcommit_intake_blockers: tuple[str, ...]
+    postcommit_escalations: tuple[str, ...]
     reachable_run_events: tuple[RunEventReference, ...]
     merge_policy_digest: str
     run_local_reducer_digest: str
