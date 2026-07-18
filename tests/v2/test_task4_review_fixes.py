@@ -137,6 +137,41 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         self.assertEqual(state.federated_states[0].analysis_state.value, "ESCALATED")
         self.assertFalse(state.federated_states[0].default_retrievable)
 
+    def test_same_observation_id_is_isolated_across_runs(self):
+        store = prepared_fixture(self.root / "cross-run-observation")
+        first = store.complete_commit(store._test_prepared_commit)
+        store.register_run("run-2", analysis_state="COLLECTING")
+        second = store.complete_commit(
+            valid_prepared_commit(store, run_id="run-2", commit_tx_id="commit-2")
+        )
+        receipts = (
+            store.inbox_observation(
+                "run-1", first.payload["object_id"], b"late", observation_id="shared"
+            ),
+            store.inbox_observation(
+                "run-2", second.payload["object_id"], b"late", observation_id="shared"
+            ),
+        )
+
+        state = store.recover()
+        opened = [
+            event
+            for event in store._project_ledger("work").recover().events
+            if event.event_type == "COMPLETION_RECHECK_OPENED"
+        ]
+        self.assertEqual(len(opened), 2)
+        self.assertEqual(len({receipt.recheck_tx_id for receipt in receipts}), 2)
+        self.assertEqual(
+            {event.payload["run_id"] for event in opened}, {"run-1", "run-2"}
+        )
+        self.assertTrue(
+            all(
+                item.analysis_state.value == "COMPLETION_RECHECK_PENDING"
+                and not item.default_retrievable
+                for item in state.federated_states
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

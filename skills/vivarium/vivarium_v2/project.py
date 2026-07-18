@@ -1128,7 +1128,6 @@ class ProjectStore:
         )
         digest = domain_hash("vivarium-postcommit-observation/v1", base64.b64encode(body).decode("ascii"))
         observation_id = observation_id or f"observation-{len(self.business_event_types()) + 1}"
-        recheck_tx_id = f"recheck:{observation_id}"
         oversize = len(body) > self.inbox_limit
         encoded = base64.b64encode(body[: self.inbox_limit]).decode("ascii")
         candidate = next(
@@ -1143,6 +1142,15 @@ class ProjectStore:
         )
         if candidate is None:
             raise IntegrityError("observation target is not an active committed object")
+        recheck_tx_id = "recheck:" + domain_hash(
+            "vivarium-recheck-identity/v1",
+            {
+                "run_id": run_id,
+                "observation_id": observation_id,
+                "target_commit_event_id": candidate.event_id,
+                "observation_digest": digest,
+            },
+        )
         with self._ordered_locks(
             branch_id=candidate.payload.get("branch_id", "branch-1"),
             execution_id=recheck_tx_id,
@@ -1178,6 +1186,17 @@ class ProjectStore:
                 or active_object.object_head != commit_event.payload.get("object_head")
             ):
                 raise IntegrityError("observation target is not an active committed object")
+            bound_recheck_tx_id = "recheck:" + domain_hash(
+                "vivarium-recheck-identity/v1",
+                {
+                    "run_id": run_id,
+                    "observation_id": observation_id,
+                    "target_commit_event_id": commit_event.event_id,
+                    "observation_digest": digest,
+                },
+            )
+            if bound_recheck_tx_id != recheck_tx_id:
+                raise IntegrityError("observation target changed during intake")
             payload = {
                 "observation_id": observation_id,
                 "observed_object_id": observed_object_id,
@@ -1188,6 +1207,7 @@ class ProjectStore:
                 "source": source,
                 "authority": authority,
                 "target_commit_tx_id": commit_event.payload["commit_tx_id"],
+                "target_commit_event_id": commit_event.event_id,
                 "target_completion_proof_digest": commit_event.payload[
                     "completion_proof_digest"
                 ],
@@ -1240,37 +1260,63 @@ class ProjectStore:
             raise IntegrityError("observation is not inboxed")
         if inbox.payload.get("oversize"):
             raise IntegrityError("oversize observation remains fail-closed")
-        recheck_tx_id = inbox.payload.get("recheck_tx_id", f"recheck:{observation_id}")
-        existing = next(
+        recheck_tx_id = inbox.payload.get("recheck_tx_id", f"recheck:{run_id}:{observation_id}")
+        commit = next(
             (
                 event
-                for event in self._project_ledger("work").recover().events
-                if event.event_type == "COMPLETION_RECHECK_OPENED"
-                and event.payload["recheck_tx_id"] == recheck_tx_id
+                for event in reversed(self._project_ledger("work").recover().events)
+                if event.event_type == "STAGE_COMMITTED"
+                and event.payload.get("commit_tx_id")
+                == inbox.payload.get("target_commit_tx_id")
+                and (
+                    "target_commit_event_id" not in inbox.payload
+                    or event.event_id == inbox.payload["target_commit_event_id"]
+                )
             ),
             None,
         )
-        if existing is not None:
-            if not any(
-                e.event_type == "POSTCOMMIT_OBSERVATION_OPENED"
-                and e.payload["observation_id"] == observation_id
-                for e in run_events
-            ):
-                self._append(
-                    self._run_ledger(run_id),
-                    "POSTCOMMIT_OBSERVATION_OPENED",
-                    {"observation_id": observation_id},
-                    recheck_tx_id,
-                )
-            return existing
-        commit = next(
-            event
-            for event in reversed(self._project_ledger("work").recover().events)
-            if event.event_type == "STAGE_COMMITTED"
-            and event.payload.get("commit_tx_id") == inbox.payload.get("target_commit_tx_id")
-        )
+        if (
+            commit is None
+            or commit.payload.get("run_id") != run_id
+            or commit.payload.get("object_id") != inbox.payload.get("observed_object_id")
+        ):
+            raise IntegrityError("recheck inbox does not bind its target commit")
         prepared = self._intent(commit.payload["commit_tx_id"])
         with self._ordered_locks(branch_id=prepared.branch_id, execution_id=recheck_tx_id):
+            existing = next(
+                (
+                    event
+                    for event in self._project_ledger("work").recover().events
+                    if event.event_type == "COMPLETION_RECHECK_OPENED"
+                    and event.payload["recheck_tx_id"] == recheck_tx_id
+                ),
+                None,
+            )
+            if existing is not None:
+                expected_binding = {
+                    "run_id": run_id,
+                    "observation_id": observation_id,
+                    "observation_digest": inbox.payload["observation_digest"],
+                    "target_commit_event_id": commit.event_id,
+                    "target_commit_tx_id": commit.payload["commit_tx_id"],
+                }
+                if any(
+                    existing.payload.get(field) != value
+                    for field, value in expected_binding.items()
+                ):
+                    raise IntegrityError("existing recheck identity binding disagrees")
+                if not any(
+                    event.event_type == "POSTCOMMIT_OBSERVATION_OPENED"
+                    and event.payload["observation_id"] == observation_id
+                    for event in run_events
+                ):
+                    self._append(
+                        self._run_ledger(run_id),
+                        "POSTCOMMIT_OBSERVATION_OPENED",
+                        {"observation_id": observation_id},
+                        recheck_tx_id,
+                    )
+                return existing
             cut = reduce_project_cut(self._prefixes())
             event = self._append(
                 self._project_ledger("work"),
@@ -1295,6 +1341,7 @@ class ProjectStore:
                     "observation_id": observation_id,
                     "observation_digest": inbox.payload["observation_digest"],
                     "target_commit_tx_id": commit.payload["commit_tx_id"],
+                    "target_commit_event_id": commit.event_id,
                 },
                 recheck_tx_id,
             )

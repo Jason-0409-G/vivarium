@@ -212,8 +212,8 @@ def _reduce_project_cut(
     open_recheck_scopes: dict[
         tuple[str, str], tuple[tuple[str, ...], tuple[str, ...]]
     ] = {}
-    task4_commits: dict[str, tuple[str, str, str, str]] = {}
-    opened_observations: dict[tuple[str, str], tuple[str, str]] = {}
+    task4_commits: dict[str, tuple[str, str, str, str, str]] = {}
+    opened_observations: dict[tuple[str, str], tuple[str, str, str]] = {}
     for revision, namespace, item, payload, contract in semantic:
         task4_commit_fields = {
             "branch_id",
@@ -288,6 +288,7 @@ def _reduce_project_cut(
                 _require_string(payload, "object_id"),
                 branch_id,
                 _require_string(payload, "new_state_snapshot_id"),
+                item.event_id,
             )
         elif item.event_type == "ROLLBACK_COMMITTED":
             branch_id = _require_string(payload, "branch_id")
@@ -437,6 +438,7 @@ def _reduce_project_cut(
                             "observation_id",
                             "observation_digest",
                             "target_commit_tx_id",
+                            "target_commit_event_id",
                         }
                         present_identity = identity_fields & set(payload)
                         active_task4_targets = {
@@ -461,12 +463,16 @@ def _reduce_project_cut(
                             target_commit_tx_id = _require_string(
                                 payload, "target_commit_tx_id"
                             )
+                            target_commit_event_id = _require_string(
+                                payload, "target_commit_event_id"
+                            )
                             record = task4_commits.get(target_commit_tx_id)
                             if (
                                 target_namespace != "work"
                                 or record is None
                                 or record[0] != run_id
                                 or record[1] != target_object_id
+                                or record[4] != target_commit_event_id
                                 or record[3]
                                 not in branch_ancestry.get(record[2], (ZERO_HASH,))
                                 or target_commit_tx_id not in active_task4_targets
@@ -478,6 +484,7 @@ def _reduce_project_cut(
                             observation_binding = (
                                 observation_digest,
                                 target_commit_tx_id,
+                                target_commit_event_id,
                             )
                             if observation_key in opened_observations:
                                 raise IntegrityError(
