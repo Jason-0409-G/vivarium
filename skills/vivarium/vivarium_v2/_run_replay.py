@@ -11,6 +11,7 @@ from ._replay_common import (
     _dependency,
     _dependency_projection,
     _require_dict,
+    _require_int,
     _require_string,
     _verify_event_prefix,
 )
@@ -23,7 +24,7 @@ from ._run_state_support import (
 )
 from .canonical import domain_hash
 from .errors import IntegrityError
-from .events import Event
+from .events import Event, ZERO_HASH
 from .state import (
     AnalysisState,
     AttemptState,
@@ -85,7 +86,11 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
         if action == "freeze_dependencies":
             if payload["attempt_id"] != active_attempt_id:
                 raise IntegrityError("dependency closure targets a non-active attempt")
-            if active().direct_dependency_heads or active().dependency_closure:
+            if (
+                active().direct_dependency_heads
+                or active().dependency_closure
+                or active().project_semantic_cut_root_baseline != ZERO_HASH
+            ):
                 raise IntegrityError("attempt dependency closure may only be frozen once")
             direct = tuple(sorted(_dependency(raw) for raw in payload["direct_dependency_heads"]))
             closure = tuple(sorted(_dependency(raw) for raw in payload["dependency_closure"]))
@@ -96,15 +101,28 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             closure_map = {(value.namespace, value.object_id): value for value in closure}
             if any(closure_map.get((value.namespace, value.object_id)) != value for value in direct):
                 raise IntegrityError("dependency closure must include every direct head")
+            project_revision = _require_int(payload, "project_revision")
+            if project_revision < 0:
+                raise IntegrityError("project dependency baseline revision cannot be negative")
             attempts[active_attempt_id] = replace(
-                active(), direct_dependency_heads=direct, dependency_closure=closure
+                active(),
+                direct_dependency_heads=direct,
+                dependency_closure=closure,
+                project_revision_baseline=project_revision,
+                project_semantic_cut_root_baseline=_require_string(
+                    payload, "project_semantic_cut_root"
+                ),
             )
         elif action == "freeze_evidence":
             cut_id = _require_string(payload, "evidence_cut_id")
             if cut_id in evidence:
                 raise IntegrityError("evidence cut head may only be frozen once")
             evidence[cut_id] = EvidenceCutHead(
-                cut_id, _require_string(payload, "head_digest"), item.event_id, item.event_hash
+                cut_id,
+                active_attempt_id,
+                _require_string(payload, "head_digest"),
+                item.event_id,
+                item.event_hash,
             )
         elif action == "freeze_evidence_bundle":
             bundle_id = _require_string(payload, "bundle_id")
@@ -113,6 +131,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("evidence bundle IDs must be unique")
             if (
                 cut is None
+                or cut.attempt_id != active_attempt_id
                 or payload["evidence_cut_event_id"] != cut.event_id
                 or payload["evidence_cut_event_hash"] != cut.event_hash
                 or payload["evidence_cut_digest"] != cut.head_digest
@@ -120,6 +139,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("evidence bundle does not bind a reachable evidence cut")
             bundles[bundle_id] = EvidenceBundleHead(
                 bundle_id,
+                active_attempt_id,
                 _require_string(payload, "bundle_digest"),
                 cut.evidence_cut_id,
                 cut.event_id,
@@ -136,7 +156,11 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("commit_tx_id may only have one durable preparation")
             cut_id = _require_string(payload, "evidence_cut_id")
             cut_digest = _require_string(payload, "evidence_cut_digest")
-            if cut_id not in evidence or evidence[cut_id].head_digest != cut_digest:
+            if (
+                cut_id not in evidence
+                or evidence[cut_id].attempt_id != active_attempt_id
+                or evidence[cut_id].head_digest != cut_digest
+            ):
                 raise IntegrityError("commit preparation references an unknown evidence cut")
             origin = _analysis_value(
                 _require_string(payload, "origin_state"), "commit preparation origin state"
@@ -175,11 +199,16 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("completion classification IDs must be unique")
             cut_id = _require_string(payload, "evidence_cut_id")
             cut_digest = _require_string(payload, "evidence_cut_digest")
-            if cut_id not in evidence or evidence[cut_id].head_digest != cut_digest:
+            if (
+                cut_id not in evidence
+                or evidence[cut_id].attempt_id != active_attempt_id
+                or evidence[cut_id].head_digest != cut_digest
+            ):
                 raise IntegrityError("completion classification references an unknown evidence cut")
             outcome = _require_string(payload, "outcome")
             classification_body = {
                 "classification_id": classification_id,
+                "attempt_id": active_attempt_id,
                 "event_id": item.event_id,
                 "event_hash": item.event_hash,
                 "evidence_cut_id": cut_id,
@@ -188,6 +217,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             }
             classification = CompletionClassification(
                 classification_id,
+                active_attempt_id,
                 item.event_id,
                 item.event_hash,
                 cut_id,
@@ -210,7 +240,12 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("completion proof must be recorded while collecting")
             proof_id = _require_string(payload, "completion_proof_id")
             classification = classifications.get(_require_string(payload, "classification_id"))
-            if proof_id in proofs or classification is None or classification.outcome != "success":
+            if (
+                proof_id in proofs
+                or classification is None
+                or classification.attempt_id != active_attempt_id
+                or classification.outcome != "success"
+            ):
                 raise IntegrityError("completion proof has no unique durable success classification")
             if (
                 payload["classification_event_id"] != classification.event_id
@@ -222,6 +257,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("completion proof binding disagrees with classification")
             proofs[proof_id] = CompletionProofHead(
                 proof_id,
+                active_attempt_id,
                 _require_string(payload, "completion_proof_digest"),
                 classification.classification_id,
                 classification.event_id,
@@ -238,6 +274,8 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             if (
                 proof is None
                 or bundle is None
+                or proof.attempt_id != active_attempt_id
+                or bundle.attempt_id != active_attempt_id
                 or payload["completion_proof_event_id"] != proof.event_id
                 or payload["completion_proof_event_hash"] != proof.event_hash
                 or payload["completion_proof_digest"] != proof.completion_proof_digest
@@ -266,6 +304,8 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             if (
                 proof is None
                 or bundle is None
+                or proof.attempt_id != active_attempt_id
+                or bundle.attempt_id != active_attempt_id
                 or payload["completion_proof_event_id"] != proof.event_id
                 or payload["completion_proof_event_hash"] != proof.event_hash
                 or payload["completion_proof_digest"] != proof.completion_proof_digest
@@ -277,6 +317,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("validator report authority chain is inconsistent")
             validator_reports[report_id] = ValidatorReportHead(
                 report_id,
+                active_attempt_id,
                 _require_string(payload, "validator_report_digest"),
                 proof.completion_proof_id,
                 proof.event_id,
@@ -294,6 +335,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             report = validator_reports.get(_require_string(payload, "validator_report_id"))
             if (
                 report is None
+                or report.attempt_id != active_attempt_id
                 or payload["validator_report_event_id"] != report.event_id
                 or payload["validator_report_event_hash"] != report.event_hash
                 or payload["validator_report_digest"] != report.validator_report_digest
@@ -320,6 +362,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("checker review identity/outcome is not closed")
             if (
                 report is None
+                or report.attempt_id != active_attempt_id
                 or payload["validator_report_event_id"] != report.event_id
                 or payload["validator_report_event_hash"] != report.event_hash
                 or payload["validator_report_digest"] != report.validator_report_digest
@@ -328,6 +371,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("checker review does not bind a passed validator report")
             checker_reviews[review_id] = CheckerReviewHead(
                 review_id,
+                active_attempt_id,
                 _require_string(payload, "checker_review_digest"),
                 report.validator_report_id,
                 report.event_id,
@@ -341,6 +385,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             review = checker_reviews.get(_require_string(payload, "checker_review_id"))
             if (
                 review is None
+                or review.attempt_id != active_attempt_id
                 or payload["checker_review_event_id"] != review.event_id
                 or payload["checker_review_event_hash"] != review.event_hash
                 or payload["checker_review_digest"] != review.checker_review_digest
@@ -364,6 +409,8 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             if (
                 report is None
                 or review is None
+                or report.attempt_id != active_attempt_id
+                or review.attempt_id != active_attempt_id
                 or payload["validator_report_event_id"] != report.event_id
                 or payload["validator_report_event_hash"] != report.event_hash
                 or payload["validator_report_digest"] != report.validator_report_digest
@@ -376,6 +423,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 raise IntegrityError("quorum decision authority chain is inconsistent")
             quorum_decisions[decision_id] = QuorumDecisionHead(
                 decision_id,
+                active_attempt_id,
                 _require_string(payload, "quorum_decision_digest"),
                 report.validator_report_id,
                 report.event_id,
@@ -393,6 +441,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             decision = quorum_decisions.get(_require_string(payload, "quorum_decision_id"))
             if (
                 decision is None
+                or decision.attempt_id != active_attempt_id
                 or payload["quorum_decision_event_id"] != decision.event_id
                 or payload["quorum_decision_event_hash"] != decision.event_hash
                 or payload["quorum_decision_digest"] != decision.quorum_decision_digest
@@ -423,7 +472,14 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             if payload["preparation_delta"] != {"from": "ACTIVE", "to": "INACTIVE"}:
                 raise IntegrityError("commit abort must deactivate its preparation")
             if reason in COMPLETION_ABORT_REASONS:
-                latest = next(reversed(classifications.values()), None)
+                latest = next(
+                    (
+                        value
+                        for value in reversed(classifications.values())
+                        if value.attempt_id == active_attempt_id
+                    ),
+                    None,
+                )
                 if (
                     latest is None
                     or payload.get("completion_classification_id") != latest.classification_id
@@ -469,6 +525,10 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                 logical_scope_key=active().logical_scope_key,
                 direct_dependency_heads=active().direct_dependency_heads,
                 dependency_closure=active().dependency_closure,
+                project_revision_baseline=active().project_revision_baseline,
+                project_semantic_cut_root_baseline=(
+                    active().project_semantic_cut_root_baseline
+                ),
             )
             if successor.attempt_id in attempts:
                 raise IntegrityError("attempt IDs must be unique")

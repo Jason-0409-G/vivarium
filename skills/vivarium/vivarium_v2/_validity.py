@@ -76,6 +76,17 @@ def reduce_run_validity(
     def set_effective_state(value: AnalysisState) -> None:
         attempts[active_attempt_id] = replace(active_attempt(), analysis_state=value)
 
+    baseline = active_attempt().project_revision_baseline
+    if baseline < 0 or baseline > cut.project_revision:
+        raise IntegrityError("attempt project baseline revision is outside the semantic cut")
+    if (
+        baseline > 0
+        and baseline == cut.project_revision
+        and active_attempt().project_semantic_cut_root_baseline
+        != cut.project_semantic_cut_root
+    ):
+        raise IntegrityError("attempt project baseline root disagrees with its semantic cut")
+
     def action_relation(action: ProjectRevisionAction) -> str | None:
         overlay = action.overlay
         if overlay is None:
@@ -102,13 +113,21 @@ def reduce_run_validity(
         return transition
 
     for action in cut.revision_actions:
+        if action.project_revision <= active_attempt().project_revision_baseline:
+            continue
         identity = (action.namespace, action.object_id)
-        current_heads[identity] = action.object_head
+        is_recheck_record = action.event_type.startswith("COMPLETION_")
+        if not is_recheck_record:
+            current_heads[identity] = action.object_head
         dependency_expectations = {
             (item.namespace, item.object_id): item.object_head
             for item in active_attempt().dependency_closure
         }
-        if identity in dependency_expectations and action.object_head != dependency_expectations[identity]:
+        if (
+            not is_recheck_record
+            and identity in dependency_expectations
+            and action.object_head != dependency_expectations[identity]
+        ):
             if active_attempt().analysis_state not in {
                 AnalysisState.PLANNED,
                 AnalysisState.STALE_BRANCH,
@@ -154,6 +173,10 @@ def reduce_run_validity(
                 != dependency_delta.expected_dependency_closure
                 or active_attempt().logical_scope_key
                 != dependency_delta.expected_logical_scope_key
+                or active_attempt().project_revision_baseline
+                != dependency_delta.expected_project_revision_baseline
+                or active_attempt().project_semantic_cut_root_baseline
+                != dependency_delta.expected_project_semantic_cut_root_baseline
             ):
                 raise IntegrityError("project correction dependency CAS does not match prior attempt")
             transition = overlay_transition(overlay, guard)

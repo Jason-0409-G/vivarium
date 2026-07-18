@@ -94,6 +94,8 @@ def prepared_run(run_id="run-1", dependency_heads=()):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": list(dependency_heads),
                 "dependency_closure": list(dependency_heads),
             },
@@ -402,6 +404,7 @@ class FederatedRecoveryTests(unittest.TestCase):
         )
         local = reduce_run((*self.prepared_run_events, stale_event))
         prefixes = genesis_prefixes()
+        correction_baseline = reduce_project_cut(as_prefixes(prefixes))
         correction = event(
             prefixes["work"],
             "project-work",
@@ -432,6 +435,12 @@ class FederatedRecoveryTests(unittest.TestCase):
                     "new_dependency_closure": [],
                     "expected_logical_scope_key": "logical-scope-1",
                     "new_logical_scope_key": "logical-scope-1",
+                    "expected_project_revision_baseline": 0,
+                    "new_project_revision_baseline": 0,
+                    "expected_project_semantic_cut_root_baseline": ZERO_HASH,
+                    "new_project_semantic_cut_root_baseline": (
+                        correction_baseline.project_semantic_cut_root
+                    ),
                 },
             },
         )

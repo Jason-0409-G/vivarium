@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from skills.vivarium.vivarium_v2.errors import IntegrityError
+from skills.vivarium.vivarium_v2.events import ZERO_HASH
 from skills.vivarium.vivarium_v2.reducers import (
     federate,
     reduce_project_cut,
@@ -658,6 +659,8 @@ class TemporalGraphAndClosureCounterexamples(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": [direct],
                 "dependency_closure": [direct, fact_a],
             },
@@ -691,6 +694,8 @@ class TemporalGraphAndClosureCounterexamples(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": [direct],
                 "dependency_closure": [direct],
             },
@@ -958,6 +963,7 @@ class ProjectTransitionExecutionHarness(unittest.TestCase):
             local = reduce_run(run_genesis(source, run_id=f"correction-{index}"))
             tail = local.reachable_run_events[-1]
             values = project_genesis()
+            correction_baseline = reduce_project_cut(prefixes(values))
             payload = activation(
                 1,
                 f"branch-correction-{index}",
@@ -983,6 +989,12 @@ class ProjectTransitionExecutionHarness(unittest.TestCase):
                     "new_dependency_closure": [],
                     "expected_logical_scope_key": "logical-scope-1",
                     "new_logical_scope_key": "logical-scope-1",
+                    "expected_project_revision_baseline": 0,
+                    "new_project_revision_baseline": 0,
+                    "expected_project_semantic_cut_root_baseline": ZERO_HASH,
+                    "new_project_semantic_cut_root_baseline": (
+                        correction_baseline.project_semantic_cut_root
+                    ),
                 },
             )
             self._append_and_execute(

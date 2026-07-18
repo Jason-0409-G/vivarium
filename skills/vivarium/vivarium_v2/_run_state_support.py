@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .errors import IntegrityError
-from .events import Event
+from .events import Event, ZERO_HASH
 from .state import (
     AnalysisState,
     AttemptState,
@@ -43,6 +43,8 @@ def _attempt_projection(item: AttemptState) -> dict[str, Any]:
         "dependency_closure": [
             _dependency_projection(value) for value in item.dependency_closure
         ],
+        "project_revision_baseline": item.project_revision_baseline,
+        "project_semantic_cut_root_baseline": item.project_semantic_cut_root_baseline,
         "request_key": item.request_key,
         "intent_key": item.intent_key,
         "execution_key": item.execution_key,
@@ -55,6 +57,7 @@ def _attempt_projection(item: AttemptState) -> dict[str, Any]:
 def _classification_projection(item: CompletionClassification) -> dict[str, str]:
     return {
         "classification_id": item.classification_id,
+        "attempt_id": item.attempt_id,
         "event_id": item.event_id,
         "event_hash": item.event_hash,
         "evidence_cut_id": item.evidence_cut_id,
@@ -67,6 +70,7 @@ def _classification_projection(item: CompletionClassification) -> dict[str, str]
 def _evidence_bundle_projection(item: EvidenceBundleHead) -> dict[str, str]:
     return {
         "bundle_id": item.bundle_id,
+        "attempt_id": item.attempt_id,
         "bundle_digest": item.bundle_digest,
         "evidence_cut_id": item.evidence_cut_id,
         "evidence_cut_event_id": item.evidence_cut_event_id,
@@ -80,6 +84,7 @@ def _evidence_bundle_projection(item: EvidenceBundleHead) -> dict[str, str]:
 def _completion_proof_projection(item: CompletionProofHead) -> dict[str, str]:
     return {
         "completion_proof_id": item.completion_proof_id,
+        "attempt_id": item.attempt_id,
         "completion_proof_digest": item.completion_proof_digest,
         "classification_id": item.classification_id,
         "classification_event_id": item.classification_event_id,
@@ -95,6 +100,7 @@ def _completion_proof_projection(item: CompletionProofHead) -> dict[str, str]:
 def _validator_report_projection(item: ValidatorReportHead) -> dict[str, str]:
     return {
         "validator_report_id": item.validator_report_id,
+        "attempt_id": item.attempt_id,
         "validator_report_digest": item.validator_report_digest,
         "completion_proof_id": item.completion_proof_id,
         "completion_proof_event_id": item.completion_proof_event_id,
@@ -113,6 +119,7 @@ def _validator_report_projection(item: ValidatorReportHead) -> dict[str, str]:
 def _checker_review_projection(item: CheckerReviewHead) -> dict[str, str]:
     return {
         "checker_review_id": item.checker_review_id,
+        "attempt_id": item.attempt_id,
         "checker_review_digest": item.checker_review_digest,
         "validator_report_id": item.validator_report_id,
         "validator_report_event_id": item.validator_report_event_id,
@@ -127,6 +134,7 @@ def _checker_review_projection(item: CheckerReviewHead) -> dict[str, str]:
 def _quorum_decision_projection(item: QuorumDecisionHead) -> dict[str, str]:
     return {
         "quorum_decision_id": item.quorum_decision_id,
+        "attempt_id": item.attempt_id,
         "quorum_decision_digest": item.quorum_decision_digest,
         "validator_report_id": item.validator_report_id,
         "validator_report_event_id": item.validator_report_event_id,
@@ -157,6 +165,7 @@ def _preparation_projection(item: Preparation) -> dict[str, Any]:
 def _evidence_projection(item: EvidenceCutHead) -> dict[str, str]:
     return {
         "evidence_cut_id": item.evidence_cut_id,
+        "attempt_id": item.attempt_id,
         "head_digest": item.head_digest,
         "event_id": item.event_id,
         "event_hash": item.event_hash,
@@ -338,6 +347,8 @@ def _new_attempt_from_payload(
     logical_scope_key: str | None = None,
     direct_dependency_heads: tuple[DependencyHead, ...] = (),
     dependency_closure: tuple[DependencyHead, ...] = (),
+    project_revision_baseline: int | None = None,
+    project_semantic_cut_root_baseline: str | None = None,
 ) -> AttemptState:
     return AttemptState(
         _require_string(payload, "attempt_id"),
@@ -347,6 +358,15 @@ def _new_attempt_from_payload(
         analysis_state,
         direct_dependency_heads,
         dependency_closure,
+        (
+            project_revision_baseline
+            if project_revision_baseline is not None
+            else int(payload.get("project_revision", 0))
+        ),
+        (
+            project_semantic_cut_root_baseline
+            or payload.get("project_semantic_cut_root", ZERO_HASH)
+        ),
         _require_string(payload, "request_key"),
         _require_string(payload, "intent_key"),
         _require_string(payload, "execution_key"),

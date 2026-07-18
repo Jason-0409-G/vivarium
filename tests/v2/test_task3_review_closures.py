@@ -347,6 +347,8 @@ class CriticalContractClosureTests(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": [
                     {"namespace": "truth", "object_id": "fact-A", "object_head": "A1"}
                 ],
@@ -382,6 +384,7 @@ class CriticalContractClosureTests(unittest.TestCase):
             values["truth"], "project-truth", "FACT_ACTIVATED",
             activation(3, "fact-A", "A2"),
         )
+        correction_baseline = reduce_project_cut(prefixes(values))
         correction = activation(
             4,
             "branch-review-run-2",
@@ -415,6 +418,12 @@ class CriticalContractClosureTests(unittest.TestCase):
                 ],
                 "expected_logical_scope_key": "logical-scope-1",
                 "new_logical_scope_key": "logical-scope-1",
+                "expected_project_revision_baseline": 0,
+                "new_project_revision_baseline": 3,
+                "expected_project_semantic_cut_root_baseline": ZERO_HASH,
+                "new_project_semantic_cut_root_baseline": (
+                    correction_baseline.project_semantic_cut_root
+                ),
             },
         )
         values["work"] = append(
@@ -733,6 +742,8 @@ class ImportantClosureTests(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": [direct],
                 "dependency_closure": [direct, fact_a, fact_b],
             },
@@ -802,6 +813,8 @@ class ImportantClosureTests(unittest.TestCase):
             "ATTEMPT_DEPENDENCIES_FROZEN",
             {
                 "attempt_id": "attempt-1",
+                "project_revision": 0,
+                "project_semantic_cut_root": ZERO_HASH,
                 "direct_dependency_heads": [stage],
                 "dependency_closure": [stage, fact_b],
             },

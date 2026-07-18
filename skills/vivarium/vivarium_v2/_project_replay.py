@@ -9,6 +9,7 @@ from ._replay_common import (
     LEDGER_REDUCER_DIGESTS,
     _dependency,
     _require_dict,
+    _require_digest,
     _require_int,
     _require_string,
     _verify_event_prefix,
@@ -71,6 +72,10 @@ def _parse_dependency_delta(
         "new_dependency_closure",
         "expected_logical_scope_key",
         "new_logical_scope_key",
+        "expected_project_revision_baseline",
+        "new_project_revision_baseline",
+        "expected_project_semantic_cut_root_baseline",
+        "new_project_semantic_cut_root_baseline",
     }
     if set(raw) != expected_fields:
         raise IntegrityError("correction dependency delta has an invalid field set")
@@ -91,6 +96,13 @@ def _parse_dependency_delta(
     canonical = _canonical_dependency_closure_at_revision(objects, new_direct)
     if new_closure != canonical:
         raise IntegrityError("correction dependency closure is not canonical at its revision")
+    expected_revision = _require_int(raw, "expected_project_revision_baseline")
+    new_revision = _require_int(raw, "new_project_revision_baseline")
+    if (
+        new_revision != payload["project_revision"] - 1
+        or new_revision < expected_revision
+    ):
+        raise IntegrityError("correction project baseline revision is inconsistent")
     return AttemptDependencyDelta(
         expected_direct,
         expected_closure,
@@ -98,6 +110,10 @@ def _parse_dependency_delta(
         new_closure,
         _require_string(raw, "expected_logical_scope_key"),
         _require_string(raw, "new_logical_scope_key"),
+        expected_revision,
+        new_revision,
+        _require_digest(raw, "expected_project_semantic_cut_root_baseline"),
+        _require_digest(raw, "new_project_semantic_cut_root_baseline"),
     )
 
 
@@ -174,12 +190,15 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
     ] = {}
     for revision, namespace, item, payload, contract in semantic:
         active_object = _project_object(namespace, payload)
-        objects[(namespace, active_object.object_id)] = active_object
+        mutates_object = contract.action != "project_recheck"
+        if mutates_object:
+            objects[(namespace, active_object.object_id)] = active_object
         identity = f"{namespace}:{active_object.object_id}"
-        if contract.action == "invalidate_object":
-            explicit_invalid.add(identity)
-        else:
-            explicit_invalid.discard(identity)
+        if mutates_object:
+            if contract.action == "invalidate_object":
+                explicit_invalid.add(identity)
+            else:
+                explicit_invalid.discard(identity)
         if contract.action == "lock_policy":
             locked_policy = _require_string(payload, "locked_policy_digest")
         overlay = None
@@ -195,6 +214,12 @@ def reduce_project_cut(prefixes: ProjectPrefixes) -> ProjectSemanticCut:
                     logical_scope_key=dependency_delta.new_logical_scope_key,
                     direct_dependency_heads=dependency_delta.new_direct_dependency_heads,
                     dependency_closure=dependency_delta.new_dependency_closure,
+                    project_revision_baseline=(
+                        dependency_delta.new_project_revision_baseline
+                    ),
+                    project_semantic_cut_root_baseline=(
+                        dependency_delta.new_project_semantic_cut_root_baseline
+                    ),
                 )
                 owner_guard = "new_branch_created"
                 descendant_guard = ""

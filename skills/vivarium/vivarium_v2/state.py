@@ -406,6 +406,7 @@ class DependencyHead:
 @dataclass(frozen=True, order=True)
 class EvidenceCutHead:
     evidence_cut_id: str
+    attempt_id: str
     head_digest: str
     event_id: str
     event_hash: str
@@ -466,6 +467,8 @@ class AttemptState:
     analysis_state: AnalysisState
     direct_dependency_heads: tuple[DependencyHead, ...]
     dependency_closure: tuple[DependencyHead, ...]
+    project_revision_baseline: int
+    project_semantic_cut_root_baseline: str
     request_key: str
     intent_key: str
     execution_key: str
@@ -477,6 +480,7 @@ class AttemptState:
 @dataclass(frozen=True, order=True)
 class CompletionClassification:
     classification_id: str
+    attempt_id: str
     event_id: str
     event_hash: str
     evidence_cut_id: str
@@ -488,6 +492,7 @@ class CompletionClassification:
 @dataclass(frozen=True, order=True)
 class EvidenceBundleHead:
     bundle_id: str
+    attempt_id: str
     bundle_digest: str
     evidence_cut_id: str
     evidence_cut_event_id: str
@@ -500,6 +505,7 @@ class EvidenceBundleHead:
 @dataclass(frozen=True, order=True)
 class CompletionProofHead:
     completion_proof_id: str
+    attempt_id: str
     completion_proof_digest: str
     classification_id: str
     classification_event_id: str
@@ -514,6 +520,7 @@ class CompletionProofHead:
 @dataclass(frozen=True, order=True)
 class ValidatorReportHead:
     validator_report_id: str
+    attempt_id: str
     validator_report_digest: str
     completion_proof_id: str
     completion_proof_event_id: str
@@ -531,6 +538,7 @@ class ValidatorReportHead:
 @dataclass(frozen=True, order=True)
 class CheckerReviewHead:
     checker_review_id: str
+    attempt_id: str
     checker_review_digest: str
     validator_report_id: str
     validator_report_event_id: str
@@ -544,6 +552,7 @@ class CheckerReviewHead:
 @dataclass(frozen=True, order=True)
 class QuorumDecisionHead:
     quorum_decision_id: str
+    attempt_id: str
     quorum_decision_digest: str
     validator_report_id: str
     validator_report_event_id: str
@@ -606,6 +615,10 @@ class AttemptDependencyDelta:
     new_dependency_closure: tuple[DependencyHead, ...]
     expected_logical_scope_key: str
     new_logical_scope_key: str
+    expected_project_revision_baseline: int
+    new_project_revision_baseline: int
+    expected_project_semantic_cut_root_baseline: str
+    new_project_semantic_cut_root_baseline: str
 
 
 @dataclass(frozen=True, order=True)
