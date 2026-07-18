@@ -53,14 +53,14 @@ class Ledger:
                     raise OSError("short ledger write")
                 fh.flush()
                 os.fsync(fh.fileno())
+                if not existed:
+                    directory_fd = os.open(self.path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
             finally:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-        if not existed:
-            directory_fd = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
 
     def recover(self) -> RecoveryResult:
         if not self.path.exists():
