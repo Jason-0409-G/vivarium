@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from ._replay_common import (
@@ -15,8 +16,10 @@ from ._replay_common import (
     _verify_event_prefix,
 )
 from ._project_support import (
+    PROJECT_CUT_DOMAIN,
     _compute_invalidation,
     _object_projection,
+    _project_cut_root_with_snapshots,
     _project_object,
     _project_graph,
     _project_validity_values_v2,
@@ -38,9 +41,6 @@ from .state import (
     ProjectSemanticCut,
     validate_event_payload,
 )
-
-PROJECT_CUT_DOMAIN = "vivarium-project-semantic-cut/v1"
-
 
 def _canonical_dependency_closure_at_revision(
     objects: dict[tuple[str, str], ProjectObjectHead],
@@ -413,18 +413,31 @@ def _reduce_project_cut(
             historical = _reduce_project_cut(
                 ProjectPrefixes(**truncated), build_revision_snapshots=False
             )
+            provisional = ProjectRevisionSnapshot(
+                target_revision,
+                ZERO_HASH,
+                historical.active_object_heads,
+                historical.invalidation_closure,
+                historical.locked_policy_digest,
+                historical.project_validity_root,
+                historical.project_validity_reducer_digest,
+            )
+            candidate_chain = (*snapshots, provisional)
             snapshots.append(
-                ProjectRevisionSnapshot(
-                    target_revision,
-                    historical.project_semantic_cut_root,
-                    historical.active_object_heads,
-                    historical.invalidation_closure,
-                    historical.locked_policy_digest,
-                    historical.project_validity_root,
-                    historical.project_validity_reducer_digest,
+                replace(
+                    provisional,
+                    project_semantic_cut_root=_project_cut_root_with_snapshots(
+                        historical, candidate_chain
+                    ),
                 )
             )
         revision_snapshots = tuple(snapshots)
+        cut_root = revision_snapshots[-1].project_semantic_cut_root
+        if (
+            _project_cut_root_with_snapshots(historical, revision_snapshots)
+            != cut_root
+        ):
+            raise IntegrityError("project revision snapshot chain is not authenticated")
         snapshots_by_revision = {
             snapshot.project_revision: snapshot for snapshot in revision_snapshots
         }

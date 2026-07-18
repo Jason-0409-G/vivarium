@@ -8,6 +8,8 @@ from .state import (
     AttemptState,
     ProjectObjectHead,
     ProjectOverlay,
+    ProjectRevisionSnapshot,
+    ProjectSemanticCut,
     RunLocalState,
 )
 from ._replay_common import (
@@ -18,6 +20,11 @@ from ._replay_common import (
     _dependency,
     _dependency_projection,
     _require_string,
+)
+
+PROJECT_CUT_DOMAIN = "vivarium-project-semantic-cut/v1"
+PROJECT_REVISION_SNAPSHOT_CHAIN_DOMAIN = (
+    "vivarium-project-revision-snapshot-chain/v1"
 )
 
 def _project_object(namespace: str, payload: dict[str, Any]) -> ProjectObjectHead:
@@ -49,6 +56,84 @@ def _object_projection(item: ProjectObjectHead) -> dict[str, Any]:
         "dependencies": [_dependency_projection(dep) for dep in item.dependencies],
         "owner_run_id": item.owner_run_id,
     }
+
+
+def _revision_snapshot_projection(
+    snapshot: ProjectRevisionSnapshot, *, include_cut_root: bool
+) -> dict[str, Any]:
+    projection = {
+        "project_revision": snapshot.project_revision,
+        "active_object_heads": [
+            _object_projection(item) for item in snapshot.active_object_heads
+        ],
+        "invalidation_closure": list(snapshot.invalidation_closure),
+        "locked_policy_digest": snapshot.locked_policy_digest,
+        "project_validity_root": snapshot.project_validity_root,
+        "project_validity_reducer_digest": (
+            snapshot.project_validity_reducer_digest
+        ),
+    }
+    if include_cut_root:
+        projection["project_semantic_cut_root"] = snapshot.project_semantic_cut_root
+    return projection
+
+
+def _project_cut_root_with_snapshots(
+    cut: ProjectSemanticCut,
+    snapshots: tuple[ProjectRevisionSnapshot, ...],
+) -> str:
+    snapshot_chain_digest = domain_hash(
+        PROJECT_REVISION_SNAPSHOT_CHAIN_DOMAIN,
+        [
+            _revision_snapshot_projection(
+                snapshot, include_cut_root=index < len(snapshots) - 1
+            )
+            for index, snapshot in enumerate(snapshots)
+        ],
+    )
+    projection = {
+        "project_revision": cut.project_revision,
+        "truth_event_seq": cut.truth_event_seq,
+        "truth_event_hash": cut.truth_event_hash,
+        "active_truth_root": cut.active_truth_root,
+        "active_fact_vector_digest": cut.active_fact_vector_digest,
+        "truth_reducer_digest": cut.truth_reducer_digest,
+        "decision_event_seq": cut.decision_event_seq,
+        "decision_event_hash": cut.decision_event_hash,
+        "active_decision_root": cut.active_decision_root,
+        "decision_reducer_digest": cut.decision_reducer_digest,
+        "work_state_event_seq": cut.work_state_event_seq,
+        "work_state_event_hash": cut.work_state_event_hash,
+        "active_work_root": cut.active_work_root,
+        "project_work_reducer_digest": cut.project_work_reducer_digest,
+        "memory_event_seq": cut.memory_event_seq,
+        "memory_event_hash": cut.memory_event_hash,
+        "active_memory_root": cut.active_memory_root,
+        "memory_reducer_digest": cut.memory_reducer_digest,
+        "run_registry_event_seq": cut.run_registry_event_seq,
+        "run_registry_event_hash": cut.run_registry_event_hash,
+        "active_run_registry_root": cut.active_run_registry_root,
+        "run_registry_reducer_digest": cut.run_registry_reducer_digest,
+        "locked_policy_digest": cut.locked_policy_digest,
+        "project_validity_root": cut.project_validity_root,
+        "project_validity_reducer_digest": cut.project_validity_reducer_digest,
+        "revision_snapshot_chain_digest": snapshot_chain_digest,
+    }
+    return domain_hash(PROJECT_CUT_DOMAIN, projection)
+
+
+def _validate_project_snapshot_binding(cut: ProjectSemanticCut) -> None:
+    snapshots = cut.revision_snapshots
+    if (
+        len(snapshots) != cut.project_revision + 1
+        or tuple(item.project_revision for item in snapshots)
+        != tuple(range(cut.project_revision + 1))
+        or snapshots[-1].project_semantic_cut_root
+        != cut.project_semantic_cut_root
+        or _project_cut_root_with_snapshots(cut, snapshots)
+        != cut.project_semantic_cut_root
+    ):
+        raise IntegrityError("project revision snapshot chain is not authenticated")
 
 
 def _compute_invalidation(

@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from skills.vivarium.vivarium_v2.errors import IntegrityError
 from skills.vivarium.vivarium_v2.reducers import (
@@ -54,6 +55,38 @@ def dependency_freeze_payload(revision, cut_root, direct, closure):
 
 
 class FinalCriticalClosures(unittest.TestCase):
+    def test_revision_snapshot_chain_is_bound_to_the_semantic_cut_root(self):
+        values = project_genesis()
+        values["truth"] = append(
+            values["truth"],
+            "project-truth",
+            "FACT_ACTIVATED",
+            activation(1, "fact-A", "A1"),
+        )
+        values["truth"] = append(
+            values["truth"],
+            "project-truth",
+            "FACT_ACTIVATED",
+            activation(2, "fact-A", "A2"),
+        )
+        cut = reduce_project_cut(prefixes(values))
+        forged_revision_one = replace(
+            cut.revision_snapshots[2],
+            project_revision=1,
+            project_semantic_cut_root=HASH_D,
+        )
+        tampered = replace(
+            cut,
+            revision_snapshots=(
+                cut.revision_snapshots[0],
+                forged_revision_one,
+                cut.revision_snapshots[2],
+            ),
+        )
+
+        with self.assertRaises(IntegrityError):
+            reduce_project_validity(tampered)
+
     def test_forged_older_baseline_cannot_claim_a_future_dependency_head(self):
         values = project_genesis()
         values["truth"] = append(

@@ -6,6 +6,7 @@ from ._project_support import (
     PROJECT_VALIDITY_REDUCER_DIGEST,
     _compute_invalidation,
     _project_validity_values_v2,
+    _validate_project_snapshot_binding,
     _validate_overlay_binding,
     _validate_successor_attempt,
 )
@@ -37,6 +38,7 @@ from .state import (
 def reduce_project_validity(cut: ProjectSemanticCut) -> ProjectValidity:
     if not isinstance(cut, ProjectSemanticCut):
         raise IntegrityError("project validity requires a frozen semantic cut")
+    _validate_project_snapshot_binding(cut)
     invalidation = _compute_invalidation(cut.active_object_heads, set(cut.invalidation_closure))
     digest, root, edges, descendants = _project_validity_values_v2(
         cut.active_object_heads, invalidation, cut.locked_policy_digest
