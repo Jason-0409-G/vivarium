@@ -1,0 +1,310 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+from ._reducer_support import (
+    PROJECT_VALIDITY_REDUCER_DIGEST,
+    _attempt_projection,
+    _compute_invalidation,
+    _project_validity_values_v2,
+    _validate_overlay_binding,
+    _validate_successor_attempt,
+)
+from .canonical import domain_hash
+from .errors import IntegrityError
+RELEVANT_PROJECT_INPUT_DOMAIN = "vivarium-relevant-project-validity-input/v1"
+RUN_VALIDITY_DOMAIN = "vivarium-run-validity-slice/v1"
+RUN_VALIDITY_REDUCER_DIGEST = domain_hash(
+    "vivarium-reducer-definition/v1", {"reducer": "run-validity", "version": 1}
+)
+
+from .state import (
+    AnalysisState,
+    AttemptState,
+    ProjectRevisionAction,
+    ProjectSemanticCut,
+    ProjectValidity,
+    RelevantProjectInput,
+    RunLocalState,
+    RunValiditySlice,
+    derive_transition,
+    match_transition,
+)
+
+
+def reduce_project_validity(cut: ProjectSemanticCut) -> ProjectValidity:
+    if not isinstance(cut, ProjectSemanticCut):
+        raise IntegrityError("project validity requires a frozen semantic cut")
+    invalidation = _compute_invalidation(cut.active_object_heads, set(cut.invalidation_closure))
+    digest, root, edges, descendants = _project_validity_values_v2(
+        cut.active_object_heads, invalidation, cut.locked_policy_digest
+    )
+    if (
+        digest != cut.project_validity_reducer_digest
+        or root != cut.project_validity_root
+        or invalidation != cut.invalidation_closure
+    ):
+        raise IntegrityError("project semantic cut carries inconsistent validity fields")
+    return ProjectValidity(
+        cut.active_object_heads,
+        invalidation,
+        edges,
+        descendants,
+        cut.locked_policy_digest,
+        digest,
+        root,
+    )
+
+
+def reduce_run_validity(
+    cut: ProjectSemanticCut, validity: ProjectValidity, local: RunLocalState
+) -> RunValiditySlice:
+    expected_validity = reduce_project_validity(cut)
+    if validity != expected_validity:
+        raise IntegrityError("run validity received mismatched project validity")
+    if not isinstance(local, RunLocalState):
+        raise IntegrityError("run validity requires frozen run-local output")
+    attempts = {item.attempt_id: item for item in local.attempts}
+    active_attempt_id = local.active_attempt_id
+    blockers: set[str] = set()
+    recheck_baseline: dict[str, AnalysisState] = {}
+    operational_escalated = False
+    current_heads: dict[tuple[str, str], str] = {}
+    descendants = dict(validity.descendant_closure)
+    active_objects = {
+        f"{item.namespace}:{item.object_id}": item for item in validity.active_object_heads
+    }
+
+    def active_attempt() -> AttemptState:
+        return attempts[active_attempt_id]
+
+    def set_effective_state(value: AnalysisState) -> None:
+        attempts[active_attempt_id] = replace(active_attempt(), analysis_state=value)
+
+    def action_affects_run(action: ProjectRevisionAction) -> bool:
+        overlay = action.overlay
+        if overlay is None:
+            return False
+        if overlay.run_id == local.run_id:
+            return True
+        target = f"{overlay.target_namespace}:{overlay.target_object_id}"
+        affected = {target, *descendants.get(target, ())}
+        return any(
+            active_objects.get(identity) is not None
+            and active_objects[identity].owner_run_id == local.run_id
+            for identity in affected
+        )
+
+    def overlay_transition(overlay):
+        source = active_attempt().analysis_state.value
+        if overlay.guard:
+            transition = match_transition(
+                "analysis", source, overlay.event_type, overlay.guard
+            )
+        else:
+            transition = derive_transition("analysis", source, overlay.event_type, {})
+        if transition is None or transition.owner_ledger != "project":
+            raise IntegrityError("project overlay has no machine-owned transition")
+        return transition
+
+    for action in cut.revision_actions:
+        identity = (action.namespace, action.object_id)
+        current_heads[identity] = action.object_head
+        dependency_expectations = {
+            (item.namespace, item.object_id): item.object_head
+            for item in active_attempt().dependency_closure
+        }
+        if identity in dependency_expectations and action.object_head != dependency_expectations[identity]:
+            if active_attempt().analysis_state not in {
+                AnalysisState.PLANNED,
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }:
+                set_effective_state(AnalysisState.STALE_CONTEXT)
+        if (
+            action.policy_digest is not None
+            and action.policy_digest != local.merge_policy_digest
+            and active_attempt().analysis_state not in {
+                AnalysisState.PLANNED,
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }
+        ):
+            set_effective_state(AnalysisState.STALE_CONTEXT)
+        overlay = action.overlay
+        if overlay is None or not action_affects_run(action):
+            continue
+        _validate_overlay_binding(local, overlay)
+        if overlay.event_type == "STAGE_COMMITTED":
+            transition = overlay_transition(overlay)
+            set_effective_state(AnalysisState(transition.to_state))
+        elif overlay.event_type == "CORRECTION_BRANCH_CREATED":
+            successor = overlay.successor_attempt
+            if successor is None or successor.prior_attempt_id != active_attempt_id:
+                raise IntegrityError("project correction lacks a bound successor attempt")
+            if active_attempt().analysis_state not in {
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }:
+                raise IntegrityError("project correction cannot replace a non-stale attempt")
+            transition = overlay_transition(overlay)
+            if transition.to_state != AnalysisState.PLANNED.value:
+                raise IntegrityError("project correction target is not PLANNED")
+            _validate_successor_attempt(successor, attempts, active_attempt_id)
+            attempts[successor.attempt_id] = successor
+            active_attempt_id = successor.attempt_id
+            blockers.clear()
+            recheck_baseline.clear()
+            operational_escalated = False
+        elif overlay.event_type == "COMPLETION_RECHECK_OPENED":
+            if overlay.transaction_id in blockers:
+                raise IntegrityError("recheck transaction blocker may only be opened once")
+            if not blockers:
+                recheck_baseline[active_attempt_id] = active_attempt().analysis_state
+            blockers.add(overlay.transaction_id)
+            if len(blockers) == 1:
+                target = (
+                    AnalysisState.COMPLETION_RECHECK_PENDING
+                    if overlay.guard == "complete_cut_durable"
+                    else AnalysisState.PENDING_COMPLETION_DEPENDENCY
+                )
+                transition = match_transition(
+                    "analysis",
+                    active_attempt().analysis_state.value,
+                    overlay.event_type,
+                    overlay.guard,
+                )
+                if transition.to_state != target.value:
+                    raise IntegrityError("recheck OPEN target disagrees with scope")
+                set_effective_state(target)
+            else:
+                if overlay.guard != "additional_complete_cut_durable":
+                    raise IntegrityError("additional recheck OPEN has the wrong typed scope")
+                transition = overlay_transition(overlay)
+                set_effective_state(AnalysisState(transition.to_state))
+        elif overlay.event_type == "COMPLETION_PROOF_REFRESHED":
+            if overlay.transaction_id not in blockers:
+                raise IntegrityError("recheck REFRESH has no matching blocker")
+            blockers.remove(overlay.transaction_id)
+            if blockers:
+                if overlay.guard != "refresh_blocker_removed_others_remain":
+                    raise IntegrityError("partial recheck REFRESH has the wrong typed result")
+                transition = overlay_transition(overlay)
+                set_effective_state(AnalysisState(transition.to_state))
+            else:
+                baseline = recheck_baseline.pop(active_attempt_id, None)
+                if baseline is None:
+                    raise IntegrityError("recheck REFRESH lost first-suspension baseline")
+                transition = overlay_transition(overlay)
+                if AnalysisState(transition.to_state) != baseline:
+                    raise IntegrityError("recheck REFRESH does not restore first baseline")
+                set_effective_state(baseline)
+                operational_escalated = False
+        elif overlay.event_type == "COMPLETION_PROOF_REVOKED":
+            if overlay.transaction_id not in blockers:
+                raise IntegrityError("recheck REVOKE has no matching blocker")
+            blockers.remove(overlay.transaction_id)
+            transition = overlay_transition(overlay)
+            set_effective_state(AnalysisState(transition.to_state))
+            operational_escalated = False
+        elif overlay.event_type == "COMPLETION_RECHECK_DEFERRED":
+            if overlay.transaction_id not in blockers:
+                raise IntegrityError("deferred recheck has no matching blocker")
+            transition = overlay_transition(overlay)
+            set_effective_state(AnalysisState(transition.to_state))
+            operational_escalated = True
+
+    active = active_attempt()
+    current = {
+        (item.namespace, item.object_id): item for item in validity.active_object_heads
+    }
+    invalid = set(validity.invalidation_closure)
+    relevant: list[RelevantProjectInput] = []
+    reasons: list[str] = []
+    for dependency in active.dependency_closure:
+        value = current.get((dependency.namespace, dependency.object_id))
+        invalidated = f"{dependency.namespace}:{dependency.object_id}" in invalid
+        active_head = value.object_head if value else None
+        relevant.append(
+            RelevantProjectInput(
+                dependency.namespace,
+                dependency.object_id,
+                dependency.object_head,
+                active_head,
+                invalidated,
+            )
+        )
+        if value is None:
+            reasons.append(f"missing:{dependency.namespace}:{dependency.object_id}")
+        elif active_head != dependency.object_head:
+            reasons.append(f"head_changed:{dependency.namespace}:{dependency.object_id}")
+        elif invalidated:
+            reasons.append(f"invalidated:{dependency.namespace}:{dependency.object_id}")
+    ordered_relevant = tuple(sorted(relevant))
+    ordered_reasons = tuple(sorted(reasons))
+    if ordered_reasons and active.analysis_state not in {
+        AnalysisState.PLANNED,
+        AnalysisState.STALE_BRANCH,
+        AnalysisState.STALE_CONTEXT,
+        AnalysisState.STALE_COMPLETION,
+    }:
+        set_effective_state(AnalysisState.STALE_CONTEXT)
+        active = active_attempt()
+    relevant_root = domain_hash(
+        RELEVANT_PROJECT_INPUT_DOMAIN,
+        {
+            "locked_policy_digest": validity.locked_policy_digest,
+            "relevant_project_inputs": [
+                {
+                    "namespace": item.namespace,
+                    "object_id": item.object_id,
+                    "expected_head": item.expected_head,
+                    "active_head": item.active_head,
+                    "invalidated": item.invalidated,
+                }
+                for item in ordered_relevant
+            ],
+        },
+    )
+    ordered_attempts = tuple(attempts.values())
+    output = {
+        "state": active.analysis_state.value,
+        "attempts": [_attempt_projection(item) for item in ordered_attempts],
+        "active_attempt_id": active_attempt_id,
+        "completion_recheck_blockers": sorted(blockers),
+        "operational_escalated": operational_escalated,
+        "validity_reasons": list(ordered_reasons),
+    }
+    projection = {
+        "run_id": local.run_id,
+        "ledger_id": local.ledger_id,
+        "run_event_seq": local.run_event_seq,
+        "run_event_hash": local.run_event_hash,
+        "run_local_state_root": local.run_local_state_root,
+        "attempt_dependency_heads_root": local.attempt_dependency_heads_root,
+        "relevant_project_validity_input_root": relevant_root,
+        "run_validity_reducer_digest": RUN_VALIDITY_REDUCER_DIGEST,
+        "run_validity_output": output,
+    }
+    root = domain_hash(RUN_VALIDITY_DOMAIN, projection)
+    return RunValiditySlice(
+        local.run_id,
+        local.ledger_id,
+        local.run_event_seq,
+        local.run_event_hash,
+        local.run_local_state_root,
+        local.attempt_dependency_heads_root,
+        ordered_relevant,
+        relevant_root,
+        RUN_VALIDITY_REDUCER_DIGEST,
+        active.analysis_state,
+        ordered_attempts,
+        active_attempt_id,
+        tuple(sorted(blockers)),
+        operational_escalated,
+        ordered_reasons,
+        root,
+    )

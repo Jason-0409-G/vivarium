@@ -1,0 +1,11 @@
+{
+  "schema_version": "vivarium.transition-snapshot/v1",
+  "sha256": "sha256:333ef3e86182276868cac07c2eeed9f228488533415a1913d142e4153834f991",
+  "transition_count": 201,
+  "required_tuples": [
+    ["obligation", "SUBMISSION_UNCERTAIN", "SUBMISSION_RECONCILED", "unique_terminal_debts_closed", "RESOLVED", "run"],
+    ["obligation", "JOB_LIVE", "OPERATION_RECONCILED", "cancel_caused_terminal", "ACCOUNTING_PENDING", "run"],
+    ["obligation", "CANCELLATION_UNCERTAIN", "OPERATION_RECONCILED", "cancel_caused_terminal", "RESOLVED", "run"],
+    ["external_client", "WIRE_IN_FLIGHT", "OPERATION_RECONCILED", "cancel_response_drained", "TERMINAL_DRAINED", "run"]
+  ]
+}

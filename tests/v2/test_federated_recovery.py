@@ -2,8 +2,21 @@ import unittest
 
 from skills.vivarium.vivarium_v2.errors import IntegrityError
 from skills.vivarium.vivarium_v2.events import Event, ZERO_HASH
-from skills.vivarium.vivarium_v2.reducers import federate, reduce_project_cut, reduce_run
+from skills.vivarium.vivarium_v2.reducers import (
+    empty_project_state_root,
+    federate,
+    reduce_project_cut,
+    reduce_project_validity,
+    reduce_run,
+    reduce_run_validity,
+)
 from skills.vivarium.vivarium_v2.state import AnalysisState, ProjectPrefixes
+
+
+HASH_A = "sha256:" + "a" * 64
+HASH_B = "sha256:" + "b" * 64
+HASH_C = "sha256:" + "c" * 64
+HASH_D = "sha256:" + "d" * 64
 
 
 LEDGERS = {
@@ -40,7 +53,7 @@ def genesis_prefixes():
             {
                 "activated_objects": [],
                 "canonical_dependency_edges": [],
-                "initial_state_root": "sha256:" + namespace[0] * 64,
+                "initial_state_root": empty_project_state_root(namespace),
                 "locked_policy_digest": "sha256:" + "f" * 64,
             },
         )
@@ -61,7 +74,15 @@ def prepared_run(run_id="run-1", dependency_heads=()):
         {
             "run_id": run_id,
             "analysis_state": "PLANNED",
-            "merge_policy_digest": "sha256:" + "a" * 64,
+            "attempt_id": "attempt-1",
+            "branch_id": "branch-1",
+            "request_key": "request-1",
+            "intent_key": "intent-1",
+            "execution_key": "execution-1",
+            "local_execution_key": "local-execution-1",
+            "submission_key": "submission-1",
+            "operation_keys": [],
+            "merge_policy_digest": HASH_A,
         },
     )
     events = (first,)
@@ -70,22 +91,28 @@ def prepared_run(run_id="run-1", dependency_heads=()):
             events,
             f"run:{run_id}",
             "ATTEMPT_DEPENDENCIES_FROZEN",
-            {"dependency_heads": list(dependency_heads)},
+            {
+                "attempt_id": "attempt-1",
+                "direct_dependency_heads": list(dependency_heads),
+                "dependency_closure": list(dependency_heads),
+            },
         )
         events += (frozen,)
     trace = (
-        ("CONTRACT_FROZEN", "contract_frozen"),
-        ("CANDIDATE_PREPARED", "requires_brokered_execution"),
-        ("LOCAL_EXECUTION_INTENT", "backend_local_intent_durable"),
-        ("LOCAL_WRAPPER_ATTACHED", "wrapper_receipt_identity_verified"),
-        ("TERMINAL_EVIDENCE_FROZEN", "terminal_evidence_cut_frozen"),
-        ("COMPLETION_SUCCESS_PROVEN", "success_classification_proof_bundle_durable"),
-        ("VALIDATION_PASSED", "all_hard_gates_pass"),
-        ("CHECKER_ALLOCATED", "isolated_checker_allocated"),
-        ("CHECKER_QUORUM_PASSED", "quorum_pass_no_major_critical"),
+        ("CONTRACT_FROZEN", {"event_digest": HASH_B}),
+        ("CANDIDATE_PREPARED", {"event_digest": HASH_B}),
+        ("LOCAL_EXECUTION_INTENT", {"event_digest": HASH_B}),
+        (
+            "LOCAL_WRAPPER_ATTACHED",
+            {"event_digest": HASH_B, "attachment_kind": "new_wrapper"},
+        ),
+        (
+            "TERMINAL_EVIDENCE_FROZEN",
+            {"event_digest": HASH_B, "evidence_kind": "terminal_cut"},
+        ),
     )
-    for event_type, guard in trace:
-        next_event = event(events, f"run:{run_id}", event_type, {"guard": guard})
+    for event_type, payload in trace:
+        next_event = event(events, f"run:{run_id}", event_type, payload)
         events += (next_event,)
     evidence = event(
         events,
@@ -94,6 +121,39 @@ def prepared_run(run_id="run-1", dependency_heads=()):
         {"evidence_cut_id": f"cut-{run_id}", "head_digest": "sha256:" + "b" * 64},
     )
     events += (evidence,)
+    classification = event(
+        events,
+        f"run:{run_id}",
+        "COMPLETION_CLASSIFIED",
+        {
+            "classification_id": f"classification-{run_id}",
+            "evidence_cut_id": f"cut-{run_id}",
+            "evidence_cut_digest": HASH_B,
+            "outcome": "success",
+        },
+    )
+    events += (classification,)
+    proof = event(
+        events,
+        f"run:{run_id}",
+        "COMPLETION_SUCCESS_PROVEN",
+        {
+            "classification_id": f"classification-{run_id}",
+            "classification_event_id": classification.event_id,
+            "classification_event_hash": classification.event_hash,
+            "evidence_cut_id": f"cut-{run_id}",
+            "evidence_cut_digest": HASH_B,
+            "completion_proof_id": f"proof-{run_id}",
+            "completion_proof_digest": HASH_C,
+            "bundle_digest": HASH_D,
+        },
+    )
+    events += (proof,)
+    for event_type in ("VALIDATION_PASSED", "CHECKER_ALLOCATED", "CHECKER_QUORUM_PASSED"):
+        next_event = event(
+            events, f"run:{run_id}", event_type, {"event_digest": HASH_B}
+        )
+        events += (next_event,)
     prepare = event(
         events,
         f"run:{run_id}",
@@ -106,6 +166,12 @@ def prepared_run(run_id="run-1", dependency_heads=()):
         },
     )
     return (*events, prepare), evidence, prepare
+
+
+def federated(local, cut):
+    validity = reduce_project_validity(cut)
+    run_slice = reduce_run_validity(cut, validity, local)
+    return federate(local, cut, validity, run_slice)
 
 
 def commit_payload(revision, run_id, prepare, evidence):
@@ -143,8 +209,8 @@ class FederatedRecoveryTests(unittest.TestCase):
 
     def test_project_commit_overlays_unchanged_run_tail(self):
         local = reduce_run(self.prepared_run_events)
-        before = federate(local, self.project_before_commit)
-        after = federate(local, self.project_after_commit)
+        before = federated(local, self.project_before_commit)
+        after = federated(local, self.project_after_commit)
 
         self.assertEqual(before.analysis_state, AnalysisState.COMMITTING)
         self.assertEqual(after.analysis_state, AnalysisState.COMMITTED)
@@ -183,7 +249,7 @@ class FederatedRecoveryTests(unittest.TestCase):
         state = reduce_run((*self.prepared_run_events, inboxed))
 
         self.assertTrue(state.postcommit_intake_blockers)
-        self.assertFalse(federate(state, self.project_after_commit).default_retrievable)
+        self.assertFalse(federated(state, self.project_after_commit).default_retrievable)
 
     def test_missing_project_commit_binding_fails_closed(self):
         prefixes = genesis_prefixes()
@@ -205,7 +271,7 @@ class FederatedRecoveryTests(unittest.TestCase):
         cut = reduce_project_cut(as_prefixes(prefixes))
 
         with self.assertRaises(IntegrityError):
-            federate(local, cut)
+            federated(local, cut)
 
     def test_project_commit_transaction_must_match_durable_preparation(self):
         local = reduce_run(self.prepared_run_events)
@@ -217,14 +283,14 @@ class FederatedRecoveryTests(unittest.TestCase):
         cut = reduce_project_cut(as_prefixes(prefixes))
 
         with self.assertRaises(IntegrityError):
-            federate(local, cut)
+            federated(local, cut)
 
     def test_project_correction_creates_planned_attempt_without_rewriting_run_tail(self):
         stale_event = event(
             self.prepared_run_events,
             "run:run-1",
             "CONTEXT_STALE",
-            {"guard": "knowledge_dependency_changed"},
+            {"event_digest": HASH_B, "staleness_scope": "commit_point"},
         )
         local = reduce_run((*self.prepared_run_events, stale_event))
         prefixes = genesis_prefixes()
@@ -242,12 +308,21 @@ class FederatedRecoveryTests(unittest.TestCase):
                 "run_event_id": stale_event.event_id,
                 "run_event_hash": stale_event.event_hash,
                 "correction_id": "correction-1",
+                "prior_attempt_id": "attempt-1",
+                "attempt_id": "attempt-2",
+                "branch_id": "branch-2",
+                "request_key": "request-2",
+                "intent_key": "intent-2",
+                "execution_key": "execution-2",
+                "local_execution_key": "local-execution-2",
+                "submission_key": "submission-2",
+                "operation_keys": ["operation-2"],
             },
         )
         prefixes["work"] += (correction,)
         cut = reduce_project_cut(as_prefixes(prefixes))
 
-        corrected = federate(local, cut)
+        corrected = federated(local, cut)
 
         self.assertEqual(local.analysis_state, AnalysisState.STALE_CONTEXT)
         self.assertEqual(corrected.analysis_state, AnalysisState.PLANNED)
@@ -258,6 +333,12 @@ class FederatedRecoveryTests(unittest.TestCase):
         payload.pop("commit_tx_id")
         payload["recheck_tx_id"] = "recheck-1"
         payload["object_head"] = f"stage-run-1-{event_type.lower()}"
+        payload["target_namespace"] = "work"
+        payload["target_object_id"] = "stage-run-1"
+        if event_type == "opened":
+            payload["recheck_scope"] = "own_stage"
+        elif event_type == "refreshed":
+            payload["refresh_result"] = "own_success"
         return payload
 
     def test_completion_recheck_open_and_refresh_are_project_overlays(self):
@@ -270,7 +351,7 @@ class FederatedRecoveryTests(unittest.TestCase):
             self.recheck_payload(2, "opened"),
         )
         prefixes["work"] += (opened,)
-        opened_state = federate(local, reduce_project_cut(as_prefixes(prefixes)))
+        opened_state = federated(local, reduce_project_cut(as_prefixes(prefixes)))
         refreshed = event(
             prefixes["work"],
             "project-work",
@@ -278,7 +359,7 @@ class FederatedRecoveryTests(unittest.TestCase):
             self.recheck_payload(3, "refreshed"),
         )
         prefixes["work"] += (refreshed,)
-        refreshed_state = federate(local, reduce_project_cut(as_prefixes(prefixes)))
+        refreshed_state = federated(local, reduce_project_cut(as_prefixes(prefixes)))
 
         self.assertEqual(opened_state.analysis_state, AnalysisState.COMPLETION_RECHECK_PENDING)
         self.assertFalse(opened_state.default_retrievable)
@@ -303,7 +384,7 @@ class FederatedRecoveryTests(unittest.TestCase):
         )
         prefixes["work"] += (revoked,)
 
-        revoked_state = federate(local, reduce_project_cut(as_prefixes(prefixes)))
+        revoked_state = federated(local, reduce_project_cut(as_prefixes(prefixes)))
 
         self.assertEqual(revoked_state.analysis_state, AnalysisState.STALE_COMPLETION)
         self.assertFalse(revoked_state.default_retrievable)
@@ -311,8 +392,8 @@ class FederatedRecoveryTests(unittest.TestCase):
     def test_replay_is_root_identical(self):
         one_local = reduce_run(self.prepared_run_events)
         two_local = reduce_run(self.prepared_run_events)
-        one = federate(one_local, self.project_after_commit)
-        two = federate(two_local, self.project_after_commit)
+        one = federated(one_local, self.project_after_commit)
+        two = federated(two_local, self.project_after_commit)
 
         self.assertEqual(one_local, two_local)
         self.assertEqual(one, two)

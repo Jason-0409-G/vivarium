@@ -15,6 +15,7 @@ from tests.v2.test_federated_recovery import (
     as_prefixes,
     commit_payload,
     event,
+    federated,
     genesis_prefixes,
     prepared_run,
 )
@@ -96,8 +97,8 @@ class RunValidityTests(unittest.TestCase):
         self.assertEqual(before_b.run_validity_slice_root, after_b.run_validity_slice_root)
         self.assertNotEqual(self.cut_A1.project_semantic_cut_root, self.cut_A2.project_semantic_cut_root)
         self.assertNotEqual(
-            federate(self.local_b, self.cut_A1).federated_state_root,
-            federate(self.local_b, self.cut_A2).federated_state_root,
+            federated(self.local_b, self.cut_A1).federated_state_root,
+            federated(self.local_b, self.cut_A2).federated_state_root,
         )
 
     def test_all_five_genesis_anchors_are_required(self):

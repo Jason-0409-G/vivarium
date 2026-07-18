@@ -15,6 +15,30 @@ from skills.vivarium.vivarium_v2.state import (
 )
 
 
+HASH_A = "sha256:" + "a" * 64
+HASH_B = "sha256:" + "b" * 64
+HASH_C = "sha256:" + "c" * 64
+HASH_D = "sha256:" + "d" * 64
+
+
+def run_genesis_payload(analysis_state="PLANNED", **extra):
+    payload = {
+        "run_id": "run-state-machine",
+        "analysis_state": analysis_state,
+        "attempt_id": "attempt-1",
+        "branch_id": "branch-1",
+        "request_key": "request-1",
+        "intent_key": "intent-1",
+        "execution_key": "execution-1",
+        "local_execution_key": "local-execution-1",
+        "submission_key": "submission-1",
+        "operation_keys": [],
+        "merge_policy_digest": HASH_A,
+    }
+    payload.update(extra)
+    return payload
+
+
 def append_event(events, event_type, payload):
     sequence = len(events)
     event = Event.build(
@@ -83,37 +107,62 @@ class RunReducerTests(unittest.TestCase):
         events = append_event(
             (),
             "RUN_LEDGER_GENESIS",
-            {
-                "run_id": "run-state-machine",
-                "analysis_state": "PLANNED",
-                "merge_policy_digest": "sha256:" + "a" * 64,
-            },
+            run_genesis_payload(),
         )
         trace = (
-            ("CONTRACT_FROZEN", "contract_frozen"),
-            ("CANDIDATE_PREPARED", "requires_brokered_execution"),
-            ("LOCAL_EXECUTION_INTENT", "backend_local_intent_durable"),
-            ("LOCAL_WRAPPER_ATTACHED", "wrapper_receipt_identity_verified"),
-            ("TERMINAL_EVIDENCE_FROZEN", "terminal_evidence_cut_frozen"),
-            ("COMPLETION_SUCCESS_PROVEN", "success_classification_proof_bundle_durable"),
-            ("VALIDATION_PASSED", "all_hard_gates_pass"),
-            ("CHECKER_ALLOCATED", "isolated_checker_allocated"),
-            ("CHECKER_QUORUM_PASSED", "quorum_pass_no_major_critical"),
+            ("CONTRACT_FROZEN", {"event_digest": HASH_B}),
+            ("CANDIDATE_PREPARED", {"event_digest": HASH_B}),
+            ("LOCAL_EXECUTION_INTENT", {"event_digest": HASH_B}),
+            (
+                "LOCAL_WRAPPER_ATTACHED",
+                {"event_digest": HASH_B, "attachment_kind": "new_wrapper"},
+            ),
+            (
+                "TERMINAL_EVIDENCE_FROZEN",
+                {"event_digest": HASH_B, "evidence_kind": "terminal_cut"},
+            ),
         )
-        for event_type, guard in trace:
-            events = append_event(events, event_type, {"guard": guard})
+        for event_type, payload in trace:
+            events = append_event(events, event_type, payload)
         events = append_event(
             events,
             "EVIDENCE_CUT_FROZEN",
-            {"evidence_cut_id": "cut-1", "head_digest": "sha256:" + "b" * 64},
+            {"evidence_cut_id": "cut-1", "head_digest": HASH_B},
         )
+        events = append_event(
+            events,
+            "COMPLETION_CLASSIFIED",
+            {
+                "classification_id": "classification-1",
+                "evidence_cut_id": "cut-1",
+                "evidence_cut_digest": HASH_B,
+                "outcome": "success",
+            },
+        )
+        classification = events[-1]
+        events = append_event(
+            events,
+            "COMPLETION_SUCCESS_PROVEN",
+            {
+                "classification_id": "classification-1",
+                "classification_event_id": classification.event_id,
+                "classification_event_hash": classification.event_hash,
+                "evidence_cut_id": "cut-1",
+                "evidence_cut_digest": HASH_B,
+                "completion_proof_id": "proof-1",
+                "completion_proof_digest": HASH_C,
+                "bundle_digest": HASH_D,
+            },
+        )
+        for event_type in ("VALIDATION_PASSED", "CHECKER_ALLOCATED", "CHECKER_QUORUM_PASSED"):
+            events = append_event(events, event_type, {"event_digest": HASH_B})
         return append_event(
             events,
             "COMMIT_PREPARED",
             {
                 "commit_tx_id": "commit-1",
                 "evidence_cut_id": "cut-1",
-                "evidence_cut_digest": "sha256:" + "b" * 64,
+                "evidence_cut_digest": HASH_B,
                 "origin_state": "COMMITTING",
             },
         )
@@ -201,11 +250,9 @@ class RunReducerTests(unittest.TestCase):
         events = append_event(
             (),
             "RUN_LEDGER_GENESIS",
-            {
-                "run_id": "run-state-machine",
-                "analysis_state": "SUBMISSION_UNCERTAIN",
-                "merge_policy_digest": "sha256:" + "a" * 64,
-                "obligations": [
+            run_genesis_payload(
+                "SUBMISSION_UNCERTAIN",
+                obligations=[
                     {
                         "obligation_id": "submission:key-1",
                         "obligation_kind": "submission",
@@ -213,16 +260,16 @@ class RunReducerTests(unittest.TestCase):
                         "head_digest": "sha256:" + "1" * 64,
                     }
                 ],
-            },
+            ),
         )
         events = append_event(
             events,
             "DUPLICATE_EXTERNAL_SIDE_EFFECT_DETECTED",
             {
+                "detection_kind": "multiple_accepted_jobs",
                 "analysis_delta": {
                     "expected_state": "SUBMISSION_UNCERTAIN",
                     "new_state": "ESCALATED",
-                    "guard": "multiple_accepted_jobs",
                 },
                 "obligation_deltas": [
                     {
@@ -231,9 +278,9 @@ class RunReducerTests(unittest.TestCase):
                         "expected_state": "SUBMISSION_UNCERTAIN",
                         "new_state": "DUPLICATE_EXTERNAL_SIDE_EFFECT",
                         "head_digest": "sha256:" + "2" * 64,
-                        "guard": "multiple_accepted_targets",
                     }
                 ],
+                "client_deltas": [],
             },
         )
 
@@ -246,24 +293,20 @@ class RunReducerTests(unittest.TestCase):
         events = append_event(
             (),
             "RUN_LEDGER_GENESIS",
-            {
-                "run_id": "run-state-machine",
-                "analysis_state": "PLANNED",
-                "merge_policy_digest": "sha256:" + "a" * 64,
-            },
+            run_genesis_payload(),
         )
         before = reduce_run(events)
         events = append_event(
             events,
             "EXTERNAL_CALL_STARTED",
             {
+                "event_digest": HASH_B,
                 "client_deltas": [
                     {
                         "operation_key": "operation:key-1",
                         "expected_state": "NONE",
                         "new_state": "STARTING",
                         "head_digest": "sha256:" + "3" * 64,
-                        "guard": "call_started_before_spawn",
                     }
                 ]
             },
