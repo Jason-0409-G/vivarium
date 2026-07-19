@@ -275,6 +275,10 @@ class ProjectStore:
     def append_fixture_event(self, namespace: str) -> Event:
         if namespace == "handoff":
             with self._ordered_locks():
+                if self._has_unopened_intake_blocker():
+                    raise IntegrityError(
+                        "an unopened post-commit intake blocker must be opened before handoff"
+                    )
                 return self._append(
                     self._project_ledger("work"),
                     "HANDOFF_PUBLISHED",
@@ -1011,7 +1015,9 @@ class ProjectStore:
             raise IntegrityError("artifact durability validation failed")
         return cut, local
 
-    def complete_commit(self, commit: PreparedCommit | str) -> Event:
+    def complete_commit(
+        self, commit: PreparedCommit | str, *, _resuming: bool = False
+    ) -> Event:
         prepared = self._intent(commit)
         with self._ordered_locks(branch_id=prepared.branch_id, execution_id=prepared.commit_tx_id):
             outcome = self._outcome(prepared.commit_tx_id)
@@ -1019,6 +1025,13 @@ class ProjectStore:
                 if outcome.event_type == "STAGE_COMMITTED":
                     return outcome
                 raise IntegrityError("aborted transaction cannot commit")
+            # A new canonical commit must not advance past an unconsumed
+            # post-commit observation; recovery resumes an in-flight transaction
+            # and legitimately precedes the recheck-open pass (design 7.4.1).
+            if not _resuming and self._has_unopened_intake_blocker():
+                raise IntegrityError(
+                    "an unopened post-commit intake blocker must be opened before a new stage commit"
+                )
             # These gates make every durability boundary independently injectable
             # even when a caller begins with an already durable preparation.
             self._fault("artifact_write")
@@ -1500,6 +1513,18 @@ class ProjectStore:
             if event.event_type == "RUN_REGISTERED"
         )
 
+    def _has_unopened_intake_blocker(self) -> bool:
+        """True while any run holds a post-commit observation that has been
+        INBOXED/REQUESTED but not yet consumed by a project OPENED recheck. The
+        single writer must open the pending recheck before advancing the canonical
+        state (design 7.4.1)."""
+        return any(
+            reduce_run(
+                tuple(self._run_ledger(run_id).recover().events)
+            ).postcommit_intake_blockers
+            for run_id in self._registered_run_ids()
+        )
+
     def recover(self) -> RecoveryState:
         registered = set(self._registered_run_ids())
         for run_dir in sorted((self.root / "runs").iterdir()):
@@ -1525,7 +1550,7 @@ class ProjectStore:
                 prepared = self.prepare_commit(prepared)
             if self._outcome(prepared.commit_tx_id) is None:
                 try:
-                    self.complete_commit(prepared)
+                    self.complete_commit(prepared, _resuming=True)
                 except IntegrityError:
                     self.abort_commit(prepared, "HUMAN_JUDGMENT_REQUIRED")
         for run_id in self._registered_run_ids():

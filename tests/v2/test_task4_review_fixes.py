@@ -265,6 +265,32 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         self.assertEqual(len(set(roots)), 1)
         self.assertEqual(store.business_event_types().count("STAGE_COMMITTED"), 1)
 
+    def test_m2_unopened_intake_blocker_blocks_new_commit(self):
+        # M-2: while a post-commit intake blocker is unopened, the single writer
+        # must open the pending recheck before advancing — a new stage commit
+        # (even on a different run) fails closed (design 7.4.1).
+        store = prepared_fixture(self.root / "m2-commit")
+        commit = store.complete_commit(store._test_prepared_commit)
+        store.inbox_observation(
+            "run-1", commit.payload["object_id"], b"late", observation_id="obs-1"
+        )
+        store.register_run("run-2", analysis_state="COLLECTING")
+        with self.assertRaises(IntegrityError):
+            store.complete_commit(
+                valid_prepared_commit(store, run_id="run-2", commit_tx_id="commit-2")
+            )
+
+    def test_m2_unopened_intake_blocker_blocks_handoff(self):
+        # M-2: an unopened intake blocker also fails closed a handoff of active
+        # success (design 7.4.1).
+        store = prepared_fixture(self.root / "m2-handoff")
+        commit = store.complete_commit(store._test_prepared_commit)
+        store.inbox_observation(
+            "run-1", commit.payload["object_id"], b"late", observation_id="obs-1"
+        )
+        with self.assertRaises(IntegrityError):
+            store.append_fixture_event("handoff")
+
     def test_i2_recovery_resumes_partial_run_registration(self):
         store = ProjectStore.init(
             self.root / "registration", FrozenClock("2026-07-18T00:00:00Z")
