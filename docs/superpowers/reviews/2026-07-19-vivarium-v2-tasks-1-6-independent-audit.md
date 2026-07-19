@@ -291,12 +291,13 @@
   4. `require_durable_completion_proof`（M-6）— 加载 durable `CompletionProof`、从字节重派生 digest、**再从 cut 重派生整个 proof body 并断言相等**。
   - 3 轮对抗复验（首轮抓到 Inc1 内联弱检查可被垃圾 JSON 绕过→返工；第 2 轮 25+ 攻击全 fail-closed，判 SOLID，2 处 minor 已补；第 3 轮 M-6 判 SOLID）。
 
-**Major — 已修 8 个：** M-1（`1c4b14b`/`d5aca62`）、M-6（`38bd81b`/`bcab6e6`）、M-11（`fb96da1`）、M-12（`03214bb`）、M-13（`5a4a27a`）、M-15（`120f7e4`），加非 hex digest minor（`49db775`/`e576b0d` 返工）。
+**Major — 已修 12 个：** M-1（`1c4b14b`/`d5aca62`）、M-2（`9deddc8` intake blocker 写侧禁令）、M-3+M-4（`40fd4b3` policy staleness/relevant-input root 依赖范围化）、M-5（`914d4cd`+`80b5a50` recheck staleness 支配，REFRESH/REVOKE/DEFERRED 全覆盖）、M-6（`38bd81b`/`bcab6e6`）、M-11（`fb96da1`）、M-12（`03214bb`）、M-13（`5a4a27a`）、M-15（`120f7e4`），加非 hex digest minor（`49db775`/`e576b0d` 返工）。M-3/4/5 经第 4 轮对抗复验：over-stale 已修、well-formed run 无 under-stale。
 
-**未修（诚实边界，均为高风险/纠缠/需新模型/需 Task 5，刻意未在无监督过夜里硬赶）：**
-- **M-10**（proof per-kind oneOf）：有真实设计张力——分类器 `_success_authority.required_common` 要求所有 kind 的 `profile_digest` 非-null，但本报告 §12.6 引用要 agent_only 的 profile=null；正确修需同时协调分类器（C-1 依赖）+ builder + fixture。**M-9** 同源（success cut 的 `absence_evidence` 应为空）。
-- **M-3/M-4/M-5**（validity 皇冠不变量，改错破坏精准级联失效）、**M-2**（intake blocker 写侧）、**M-14**（namespace attestation 可伪造，需真实 Orchestrator 签名 = Task 5）。
+**未修（诚实边界，均为设计张力/需新模型/需 Task 5，刻意未在无监督下硬赶）：**
+- **M-10**（proof per-kind oneOf）：有真实设计张力——分类器 `_success_authority.required_common` 要求所有 kind 的 `profile_digest` 非-null，但本报告 §12.6 引用要 agent_only 的 profile=null；正确修需同时协调分类器（C-1 依赖）+ builder + fixture。**M-9** 同源（success cut 的 `absence_evidence` 应为空）。用户决定：留到 Task 5 连真实 cut 一起做。
+- **M-14**（namespace attestation 可伪造，需真实 Orchestrator 签名 = Task 5）。
+- **M-3 残留（防御纵深，第 4 轮复验点出）**：只经全局 locked policy 治理、但未在闭包声明该 policy 的 run，supersede 后不再 restale。设计（1282）把"缺 policy edge"当**欠声明/验证债**，对 design-conformant（在闭包声明依赖）的 run 非问题；未加"治理 policy 必须是闭包边"的 commit 不变量（会破坏现有 fixture，属设计新增）。
 - **提交链剩余自报值**：`budget_digest` / `payload_root_digest` 仍只做内部一致性校验，做实需 durable budget-ledger + 重派生 payload manifest 模型（新特性）。
 - **对象真实性 vs 形状**：无真实 Orchestrator/Checker daemon 前，调用方仍能自造"形状正确"的 durable 对象；commit-gate 已逐级抬高门槛，真正闭合靠 Task 5 能力隔离（只有真实角色 UID 能封存）。
 
-**合并状态**：分支是 master 的干净 fast-forward（领先 38、落后 0）。4 个 critical 全闭合 + 复验 SOLID 后，合并的 critical 门已过；剩余 major 属高风险/新特性，随分支带入 master 不会使 master 变差。真正的独立代码审查（§18 门禁）建议在合并前由用户触发 `/code-review ultra`。
+**合并状态**：✅ 已 fast-forward 合并进 master（`origin/master` == `80b5a50`）。4 个 critical + 12 个 major 全闭合、经 4 轮对抗复验，全在 master 上。真正的独立代码审查（§18 门禁）建议由用户触发 `/code-review ultra`。**下一步（用户拍板）：转向可用性——把 V2 打包成能被 Claude Code/Codex 直接跑的生信 loop workflow。**
