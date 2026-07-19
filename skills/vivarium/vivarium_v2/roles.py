@@ -399,6 +399,20 @@ def decide_gate(
 
 QUORUM_RECORD_SCHEMA = "vivarium.quorum-record/v1"
 QUORUM_RECORD_DOMAIN = "vivarium-quorum-record/v1"
+_QUORUM_RECORD_FIELDS = frozenset(
+    {
+        "schema_version",
+        "mission_digest",
+        "rubric_digest",
+        "acceptance_contract_digest",
+        "completion_claim_digest",
+        "validator_seal",
+        "policy",
+        "capability_receipts",
+        "assignments",
+        "reviews",
+    }
+)
 
 
 def _receipt_body(receipt: CapabilityReceipt) -> dict[str, Any]:
@@ -506,6 +520,8 @@ def require_quorum_pass(
         or body.get("schema_version") != QUORUM_RECORD_SCHEMA
     ):
         raise IntegrityError("quorum record bytes are not canonical")
+    if set(body) != _QUORUM_RECORD_FIELDS:
+        raise IntegrityError("quorum record has unexpected or missing fields")
     if domain_hash(QUORUM_RECORD_DOMAIN, body) != quorum_decision_digest:
         raise IntegrityError("quorum record digest does not match its object")
     try:

@@ -603,6 +603,8 @@ class ProjectStore:
             prepared.execution_evidence_cut_digest,
             expected_run_id=prepared.run_id,
         )
+        if prepared.execution_evidence_cut_digest != bundle.execution_evidence_cut_digest:
+            raise IntegrityError("committed success cut is not the sealed evidence cut")
         require_quorum_pass(
             self,
             prepared.quorum_decision_digest,

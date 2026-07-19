@@ -147,6 +147,43 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request(**evidence))
 
+    def test_c1_commit_rejects_a_success_cut_decoupled_from_the_bundle(self):
+        # C-1 (increment 3b follow-up): the re-classified success cut must be the
+        # exact cut the evidence bundle sealed. Pairing a different — even real,
+        # same-run, success — cut with the bundle is a decoupling forgery.
+        store = self._store("decoupled-cut", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        evidence["execution_evidence_cut_digest"] = persist_execution_evidence_cut(
+            store, execution_evidence_cut(run_id="run-1", stage_id="stage-other")
+        )
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
+    def test_c1_commit_rejects_a_quorum_record_with_extra_fields(self):
+        # C-1 (increment 3b follow-up): the quorum record schema is closed like
+        # the sibling evidence-bundle gate — unexpected top-level keys are
+        # rejected, not silently ignored.
+        import json
+
+        from skills.vivarium.vivarium_v2.canonical import (
+            canonical_bytes,
+            domain_hash,
+            durable_replace,
+        )
+
+        store = self._store("extra-quorum-fields", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        records = store.root / "artifacts" / "quorum-records"
+        body = json.loads(
+            (records / f"{evidence['quorum_decision_digest'][7:]}.json").read_bytes()
+        )
+        body["totally"] = "extra"
+        digest = domain_hash("vivarium-quorum-record/v1", body)
+        durable_replace(records / f"{digest[7:]}.json", canonical_bytes(body))
+        evidence["quorum_decision_digest"] = digest
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False
