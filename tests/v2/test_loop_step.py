@@ -55,6 +55,24 @@ class LoopStepTests(unittest.TestCase):
         )
         self.assertIn("S_vesiculosa_M7.fna", stats.read_text(encoding="ascii"))
 
+    def test_empty_output_step_does_not_commit_or_poison_the_ledger(self):
+        # A step that exits 0 but produces no output fails the validator hard gate
+        # and must NOT commit — and must NOT leave a half-written COMMIT_INTENT that
+        # bricks recovery. (The step classifies success on exit-0, so the guard has
+        # to be the validator outcome, applied before any commit is prepared.)
+        store = self._store("empty")
+        step = perform_one_step(store, run_id="run-1", argv=(sys.executable, "-c", "pass"))
+        self.assertFalse(step.committed)
+        self.assertEqual(step.validation_outcome, "scientifically_invalid")
+        # the ledger is not poisoned: recovery still converges
+        state = store.recover()
+        run = next(item for item in state.federated_states if item.run_id == "run-1")
+        self.assertNotEqual(run.analysis_state.value, "COMMITTED")
+        # a second recovery is identical (no half-committed tx wedges it)
+        self.assertEqual(
+            store.recover().federated_state_root, store.recover().federated_state_root
+        )
+
     def test_idempotent_recommit_returns_same_stage_committed(self):
         store = self._store("idem")
         first = perform_one_step(

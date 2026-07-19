@@ -157,16 +157,23 @@ def perform_one_step(
         return StepCommit(result, False, commit_tx_id, None, "scientifically_invalid")
 
     cut = result.evidence_cut
-    cut_digest = persist_execution_evidence_cut(store, cut)
-    persist_completion_proof(store, result.proof)
-
     workspace = _attempt_dir(store, run_id, stage_id, attempt_id, "workspace")
     logs = _attempt_dir(store, run_id, stage_id, attempt_id, "execution_logs")
     payload_files = sorted(p for p in workspace.rglob("*") if p.is_file())
     log_files = sorted(p for p in logs.rglob("*") if p.is_file())
-    relative = lambda path: path.relative_to(store.root).as_posix()
 
+    # Run the validator hard gate BEFORE sealing any authority object or preparing
+    # a commit: a step that classifies success but fails validation (e.g. exit 0
+    # with no output) must not seal a non-pass validator report and then start a
+    # commit the quorum gate will reject -- that would leave a half-written
+    # COMMIT_INTENT that bricks recovery. Fail closed with nothing written.
     validator_outcome = _validate_outputs(payload_files, cut.exit_code)
+    if validator_outcome != "pass":
+        return StepCommit(result, False, commit_tx_id, None, validator_outcome)
+
+    cut_digest = persist_execution_evidence_cut(store, cut)
+    persist_completion_proof(store, result.proof)
+    relative = lambda path: path.relative_to(store.root).as_posix()
 
     identity = {
         "run_id": run_id,

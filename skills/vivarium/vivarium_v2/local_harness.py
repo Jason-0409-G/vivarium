@@ -6,29 +6,50 @@ cut, classifies completion and builds the proof. The only piece it delegates is
 the *harness* — the thing that actually starts an OS process and reports its
 terminal state. Tests use FakeLocalHarness with canned values; this module is the
 real one: it spawns intent.argv with subprocess in its own session/process group,
-waits for it, hashes its outputs, and reports terminal evidence in exactly the
-shape _cut_from_terminal requires, so the broker turns a real process into a real
-ExecutionEvidenceCut.
+waits for it, checks descendant containment and output quiescence, and reports
+terminal evidence in exactly the shape _cut_from_terminal requires, so the broker
+turns a real process into a real ExecutionEvidenceCut.
+
+Honesty of the terminal report is the trust boundary. Two guards back it:
+containment is measured by process-group liveness, and output quiescence by a
+bounded settle-and-rehash (a double snapshot of the workspace manifest). A
+descendant that migrates to its own session (setsid/double-fork) can evade the
+pgroup check, but if it is still writing outputs the rehash catches the mutating
+tree and the step is reported non-quiescent (fail closed). Fully containing such
+escapes needs OS-level isolation (cgroups / subreaper) and is Task-5 work.
+
+Terminal evidence is also persisted durably, so a fresh harness after a crash
+re-derives the identical cut on recovery instead of failing the identity check.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 import os
 import platform
 import subprocess
+import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from .canonical import canonical_bytes, domain_hash
+from .canonical import canonical_bytes, domain_hash, durable_replace
 from .errors import IntegrityError
 from .execution import ExecutionIntent, ProcessReceipt
 
 LOCAL_QUIESCENCE_SCHEMA = "vivarium.local-quiescence-receipt/v1"
+DEFAULT_OUTPUT_QUIESCENCE_SECONDS = 0.1
 
 
 def _content_digest(domain: str, data: bytes) -> str:
     return domain_hash(domain, base64.b64encode(data).decode("ascii"))
+
+
+def _safe_identity(value: str, field: str) -> str:
+    if not isinstance(value, str) or not value or "/" in value or ".." in value:
+        raise IntegrityError(f"{field} is not a safe stable identity")
+    return value
 
 
 def _host_boot_id() -> str:
@@ -64,23 +85,54 @@ class LocalProcessHarness:
     """Runs intent.argv to completion in the attempt workspace, in its own
     session so descendants are contained, and reports real terminal evidence."""
 
-    def __init__(self, root: str | Path):
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        output_quiescence_seconds: float = DEFAULT_OUTPUT_QUIESCENCE_SECONDS,
+    ):
         self.root = Path(root)
+        self.output_quiescence_seconds = output_quiescence_seconds
         self._state: dict[str, dict[str, Any]] = {}
 
     def _attempt_dir(self, intent: ExecutionIntent, leaf: str) -> Path:
-        return (
-            self.root
-            / "runs"
-            / intent.run_id
-            / "attempts"
-            / intent.stage_id
-            / intent.attempt_id
-            / leaf
+        run_id = _safe_identity(intent.run_id, "run_id")
+        stage_id = _safe_identity(intent.stage_id, "stage_id")
+        attempt_id = _safe_identity(intent.attempt_id, "attempt_id")
+        directory = (
+            self.root / "runs" / run_id / "attempts" / stage_id / attempt_id / leaf
         )
+        resolved = directory.resolve()
+        if self.root.resolve() not in resolved.parents and resolved != self.root.resolve():
+            raise IntegrityError("attempt directory escapes the store root")
+        return directory
 
     def workspace(self, intent: ExecutionIntent) -> Path:
         return self._attempt_dir(intent, "workspace")
+
+    def _durable_state_path(self, execution_intent_id: str) -> Path:
+        token = domain_hash("vivarium-local-harness-terminal/v1", execution_intent_id)[7:]
+        return self.root / "artifacts" / "harness-terminals" / f"{token}.json"
+
+    def _load_state(self, execution_intent_id: str) -> dict[str, Any] | None:
+        if execution_intent_id in self._state:
+            return self._state[execution_intent_id]
+        path = self._durable_state_path(execution_intent_id)
+        try:
+            body = json.loads(path.read_bytes().decode("utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return None
+        try:
+            receipt = ProcessReceipt(**body["receipt"])
+        except (TypeError, KeyError, ValueError):
+            return None
+        state = {
+            "receipt": receipt,
+            "terminal": body["terminal"],
+            "process_group_id": body["process_group_id"],
+        }
+        self._state[execution_intent_id] = state
+        return state
 
     def start_wrapper(
         self,
@@ -123,15 +175,24 @@ class LocalProcessHarness:
         persist_receipt_callback(receipt)
         if crash_at == "after_receipt_before_attach":
             raise RuntimeError(crash_at)
-        descendants_alive = self._process_group_alive(process_group_id)
         terminal = self._terminal_value(
-            intent, receipt, workspace, returncode, descendants_alive
+            intent, receipt, workspace, returncode, process_group_id
         )
         self._state[intent.execution_intent_id] = {
             "receipt": receipt,
             "terminal": terminal,
             "process_group_id": process_group_id,
         }
+        durable_replace(
+            self._durable_state_path(intent.execution_intent_id),
+            canonical_bytes(
+                {
+                    "receipt": asdict(receipt),
+                    "terminal": terminal,
+                    "process_group_id": process_group_id,
+                }
+            ),
+        )
         return receipt
 
     @staticmethod
@@ -144,18 +205,32 @@ class LocalProcessHarness:
             return True
         return True
 
+    def _output_quiescent(self, workspace: Path) -> tuple[str, bool]:
+        """Return (manifest_digest, quiescent). Quiescent means a second snapshot
+        after a bounded settle window matches the first -- catching an output tree
+        a still-running (possibly session-escaped) descendant is mutating."""
+        before = _output_manifest_digest(workspace)
+        if self.output_quiescence_seconds > 0:
+            time.sleep(self.output_quiescence_seconds)
+        after = _output_manifest_digest(workspace)
+        return after, before == after
+
     def _terminal_value(
         self,
         intent: ExecutionIntent,
         receipt: ProcessReceipt,
         workspace: Path,
         returncode: int,
-        descendants_alive: bool,
+        process_group_id: int,
     ) -> dict[str, Any]:
         exit_code = returncode if returncode >= 0 else None
         signal_number = -returncode if returncode < 0 else None
-        manifest_digest = _output_manifest_digest(workspace)
-        observed_descendant_count = 1 if descendants_alive else 0
+        manifest_digest, settled = self._output_quiescent(workspace)
+        descendants_alive = self._process_group_alive(process_group_id)
+        # Report contained+quiescent only when the process group is empty AND the
+        # output tree stopped changing across the settle window. A non-zero count
+        # makes the broker reject quiescence, so a live/escaped writer fails closed.
+        observed_descendant_count = 0 if (settled and not descendants_alive) else 1
         containment_refs: list[str] = []
         quiescence = {
             "schema_version": LOCAL_QUIESCENCE_SCHEMA,
@@ -184,7 +259,7 @@ class LocalProcessHarness:
             "cancelled": False,
             "sentinel_digest": sentinel_digest,
             "output_quiescence_manifest_digest": manifest_digest,
-            "terminal_evidence_refs": (receipt.stdout_digest, receipt.stderr_digest),
+            "terminal_evidence_refs": [receipt.stdout_digest, receipt.stderr_digest],
             "process_terminal": True,
             "quiescence_receipt": quiescence,
             "quiescence_receipt_digest": domain_hash(
@@ -193,15 +268,15 @@ class LocalProcessHarness:
         }
 
     def identity_matches(self, receipt: ProcessReceipt) -> bool:
-        stored = self._state.get(receipt.execution_intent_id)
+        stored = self._load_state(receipt.execution_intent_id)
         return stored is not None and stored["receipt"] == receipt
 
     def collect_terminal(self, receipt: ProcessReceipt) -> dict[str, Any] | None:
-        stored = self._state.get(receipt.execution_intent_id)
+        stored = self._load_state(receipt.execution_intent_id)
         return stored["terminal"] if stored is not None else None
 
     def reap_descendants(self, receipt: ProcessReceipt) -> dict[str, Any]:
-        stored = self._state.get(receipt.execution_intent_id)
+        stored = self._load_state(receipt.execution_intent_id)
         group = stored["process_group_id"] if stored is not None else receipt.process_group_id
         if self._process_group_alive(group):
             return {"observed_descendant_count": 1, "containment_refs": [f"pgid:{group}"]}

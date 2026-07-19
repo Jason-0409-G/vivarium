@@ -57,6 +57,48 @@ class LocalProcessHarnessTests(unittest.TestCase):
         self.assertIsNone(result.proof)
         self.assertEqual(result.evidence_cut.exit_code, 3)
 
+    def test_session_escaping_writer_is_not_reported_quiescent(self):
+        # A descendant that setsid()s escapes the process-group containment check,
+        # but if it is still writing outputs the settle-and-rehash catches the
+        # mutating tree, so the step is NOT reported quiescent and cannot classify
+        # success (honesty of the containment/quiescence report).
+        store = self._store("escape")
+        writer = (
+            "import os,sys,time\n"
+            "if os.fork()==0:\n"
+            "    os.setsid()\n"
+            "    for i in range(400):\n"
+            "        open('out.txt','a').write(str(i)+'\\n')\n"
+            "        time.sleep(0.005)\n"
+            "    os._exit(0)\n"
+            "sys.exit(0)\n"
+        )
+        intent = local_execution_intent(argv=(sys.executable, "-c", writer))
+        harness = LocalProcessHarness(store.root, output_quiescence_seconds=0.2)
+        result = LocalExecutionBroker(store, harness).run_or_recover(intent)
+        self.assertNotEqual(result.classification.outcome, "success")
+        self.assertNotIn("outputs_quiescent", result.evidence_cut.absence_evidence)
+
+    def test_fresh_harness_recovers_the_cut_across_a_restart(self):
+        # Terminal evidence is durable, so a fresh harness (a new process after a
+        # crash) re-derives the identical cut on recovery instead of failing the
+        # identity check and wedging the run.
+        store = self._store("restart")
+        intent = local_execution_intent(
+            argv=(sys.executable, "-c", "open('r.txt','w').write('x')")
+        )
+        first = LocalExecutionBroker(store, LocalProcessHarness(store.root)).run_or_recover(
+            intent
+        )
+        recovered = LocalExecutionBroker(
+            store, LocalProcessHarness(store.root)
+        ).recover(intent.execution_intent_id)
+        self.assertEqual(
+            recovered.evidence_cut.execution_evidence_cut_digest,
+            first.evidence_cut.execution_evidence_cut_digest,
+        )
+        self.assertIsNotNone(recovered.proof)
+
     def test_recovery_reuses_the_same_cut_without_rerunning(self):
         # The intent is durable; recovering re-derives the identical cut and never
         # starts the process a second time.
