@@ -17,6 +17,7 @@ from .evidence import require_durable_evidence_bundle
 from .events import Event, ZERO_HASH
 from .execution import require_success_completion
 from .ledger import Ledger
+from .roles import require_quorum_pass
 from .reducers import federate, reduce_project_cut, reduce_project_validity, reduce_run, reduce_run_validity
 from .state import (
     AnalysisState,
@@ -601,6 +602,15 @@ class ProjectStore:
             self,
             prepared.execution_evidence_cut_digest,
             expected_run_id=prepared.run_id,
+        )
+        require_quorum_pass(
+            self,
+            prepared.quorum_decision_digest,
+            bundle=bundle,
+            validator_report_digest=prepared.validator_report_digest,
+            review_digests=prepared.review_digests,
+            expected_completion_claim_digest=prepared.completion_claim_digest,
+            expected_acceptance_contract_digest=prepared.acceptance_contract_digest,
         )
         self._write_artifact(prepared)
         run_ledger = self._run_ledger(prepared.run_id)

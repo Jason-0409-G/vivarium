@@ -108,6 +108,45 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request(run_id="run-1", **foreign))
 
+    def test_c1_commit_rejects_a_non_passing_checker_review(self):
+        # C-1 (increment 3b): the commit re-runs decide_gate over the sealed
+        # checker reviews. A durable quorum whose checker review rejected cannot
+        # be committed, no matter what checker_quorum_valid claims.
+        store = self._store("reject-review", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1", review_outcome="reject")
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
+    def test_c1_commit_rejects_soft_isolated_checker(self):
+        # C-1 (increment 3b): decide_gate rejects a checker without hard
+        # capability isolation, so the commit must too.
+        store = self._store("soft-isolation", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1", isolation_level="soft")
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
+    def test_c1_commit_rejects_a_fabricated_quorum_record(self):
+        # C-1 (increment 3b): quorum_decision_digest must resolve to a real,
+        # reconstructable quorum record that decide_gate passes — a canonical
+        # self-hashing junk blob must not certify the quorum.
+        from skills.vivarium.vivarium_v2.canonical import (
+            canonical_bytes,
+            domain_hash,
+            durable_replace,
+        )
+
+        store = self._store("fabricated-quorum", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        junk = {"schema_version": "vivarium.quorum-record/v1", "totally": "fabricated"}
+        digest = domain_hash("vivarium-quorum-record/v1", junk)
+        durable_replace(
+            store.root / "artifacts" / "quorum-records" / f"{digest[7:]}.json",
+            canonical_bytes(junk),
+        )
+        evidence["quorum_decision_digest"] = digest
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False

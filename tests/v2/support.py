@@ -20,8 +20,10 @@ from skills.vivarium.vivarium_v2.evidence import (
 )
 from skills.vivarium.vivarium_v2.roles import (
     CapabilityReceipt,
+    QuorumPolicy,
     build_checker_assignment,
     build_checker_review,
+    persist_quorum_record,
 )
 
 
@@ -49,7 +51,7 @@ def fixture_store_at_revision(root: Path, revision: int) -> ProjectStore:
     return store
 
 
-def _seal_commit_evidence(store, tx_id, run_id="run-1"):
+def _seal_commit_evidence(store, tx_id, run_id="run-1", **quorum_overrides):
     identity = {
         "run_id": run_id,
         "stage_id": f"stage-{tx_id}",
@@ -89,6 +91,84 @@ def _seal_commit_evidence(store, tx_id, run_id="run-1"):
     return {
         "evidence_bundle_digest": bundle.evidence_bundle_digest,
         "execution_evidence_cut_digest": cut_digest,
+        **_seal_commit_quorum(store, tx_id, bundle, **quorum_overrides),
+    }
+
+
+def _seal_commit_quorum(
+    store,
+    tx_id,
+    bundle,
+    *,
+    review_outcome="pass",
+    review_severities=(),
+    isolation_level="hard",
+):
+    validator_seal = seal_validator_evidence(
+        store,
+        bundle,
+        validator_id=f"validator-{tx_id}",
+        validation_outcome="pass",
+        findings={"hard_gates": "pass"},
+    )
+    gate = lambda name: domain_hash(f"vivarium-test-gate-{name}/v1", {"tx": tx_id})
+    mission_digest = gate("mission")
+    rubric_digest = gate("rubric")
+    acceptance_contract_digest = gate("acceptance")
+    completion_claim_digest = gate("claim")
+    receipt = CapabilityReceipt(
+        receipt_id=f"receipt-{tx_id}",
+        role="checker",
+        principal_id=f"checker-{tx_id}",
+        capability_namespace=f"namespace-{tx_id}",
+        granted_capabilities=("checker_review_write",),
+        live_capabilities=(),
+        unresolved_capabilities=(),
+        isolation_level=isolation_level,
+    )
+    assignment = build_checker_assignment(
+        {
+            "assignment_id": f"assignment-{tx_id}",
+            "checker_id": receipt.principal_id,
+            "capability_namespace": receipt.capability_namespace,
+            "mission_digest": mission_digest,
+            "rubric_digest": rubric_digest,
+            "acceptance_contract_digest": acceptance_contract_digest,
+            "evidence_bundle_digest": bundle.evidence_bundle_digest,
+            "execution_evidence_cut_digest": bundle.execution_evidence_cut_digest,
+            "validator_seal_digest": validator_seal.validator_seal_digest,
+            "completion_claim_digest": completion_claim_digest,
+            "capability_receipt_digest": receipt.capability_receipt_digest,
+        },
+        receipt,
+    )
+    review = build_checker_review(
+        assignment, receipt, outcome=review_outcome, severities=review_severities
+    )
+    policy = QuorumPolicy(
+        success_grade="L1",
+        required_reviews=1,
+        require_hard_isolation=True,
+        require_independent_namespaces=False,
+    )
+    quorum_digest = persist_quorum_record(
+        store,
+        validator_seal=validator_seal,
+        mission_digest=mission_digest,
+        rubric_digest=rubric_digest,
+        acceptance_contract_digest=acceptance_contract_digest,
+        completion_claim_digest=completion_claim_digest,
+        assignments=(assignment,),
+        reviews=(review,),
+        capability_receipts=(receipt,),
+        policy=policy,
+    )
+    return {
+        "validator_report_digest": validator_seal.validation_report_digest,
+        "review_digests": (review.checker_review_digest,),
+        "quorum_decision_digest": quorum_digest,
+        "completion_claim_digest": completion_claim_digest,
+        "acceptance_contract_digest": acceptance_contract_digest,
     }
 
 

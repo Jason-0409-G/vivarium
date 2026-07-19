@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .canonical import domain_hash
+from .canonical import canonical_bytes, domain_hash, durable_replace
 from .errors import IntegrityError
 from .evidence import EvidenceBundle, ValidatorSeal, validate_evidence_bundle
 
@@ -395,14 +397,171 @@ def decide_gate(
     )
 
 
+QUORUM_RECORD_SCHEMA = "vivarium.quorum-record/v1"
+QUORUM_RECORD_DOMAIN = "vivarium-quorum-record/v1"
+
+
+def _receipt_body(receipt: CapabilityReceipt) -> dict[str, Any]:
+    return {
+        "receipt_id": receipt.receipt_id,
+        "role": receipt.role,
+        "principal_id": receipt.principal_id,
+        "capability_namespace": receipt.capability_namespace,
+        "granted_capabilities": list(receipt.granted_capabilities),
+        "live_capabilities": list(receipt.live_capabilities),
+        "unresolved_capabilities": list(receipt.unresolved_capabilities),
+        "isolation_level": receipt.isolation_level,
+    }
+
+
+def _receipt_from_body(body: Mapping[str, Any]) -> CapabilityReceipt:
+    fields = dict(body)
+    for key in ("granted_capabilities", "live_capabilities", "unresolved_capabilities"):
+        fields[key] = tuple(fields.get(key, ()))
+    return CapabilityReceipt(**fields)
+
+
+def _review_body(review: CheckerReview) -> dict[str, Any]:
+    body = dict(review.__dict__)
+    body["severities"] = list(review.severities)
+    return body
+
+
+def _review_from_body(body: Mapping[str, Any]) -> CheckerReview:
+    fields = dict(body)
+    fields["severities"] = tuple(fields.get("severities", ()))
+    return CheckerReview(**fields)
+
+
+def _quorum_record_body(
+    *,
+    validator_seal: ValidatorSeal,
+    mission_digest: str,
+    rubric_digest: str,
+    acceptance_contract_digest: str,
+    completion_claim_digest: str,
+    assignments: Sequence[CheckerAssignment],
+    reviews: Sequence[CheckerReview],
+    capability_receipts: Sequence[CapabilityReceipt],
+    policy: QuorumPolicy,
+) -> dict[str, Any]:
+    return {
+        "schema_version": QUORUM_RECORD_SCHEMA,
+        "mission_digest": mission_digest,
+        "rubric_digest": rubric_digest,
+        "acceptance_contract_digest": acceptance_contract_digest,
+        "completion_claim_digest": completion_claim_digest,
+        "validator_seal": validator_seal.canonical_body(),
+        "policy": dict(policy.__dict__),
+        "capability_receipts": [_receipt_body(item) for item in capability_receipts],
+        "assignments": [dict(item.__dict__) for item in assignments],
+        "reviews": [_review_body(item) for item in reviews],
+    }
+
+
+def persist_quorum_record(store: Any, **kwargs: Any) -> str:
+    """Content-address the full set of inputs the commit gate must re-run over
+    (validator seal, quorum policy, capability receipts, checker assignments and
+    sealed checker reviews). The returned digest is the commit's
+    quorum_decision_digest — the commit re-runs decide_gate over these durable
+    objects instead of trusting a self-reported quorum flag (design 7.4)."""
+    body = _quorum_record_body(**kwargs)
+    digest = domain_hash(QUORUM_RECORD_DOMAIN, body)
+    durable_replace(
+        Path(store.root) / "artifacts" / "quorum-records" / f"{digest[7:]}.json",
+        canonical_bytes(body),
+    )
+    return digest
+
+
+def require_quorum_pass(
+    store: Any,
+    quorum_decision_digest: str,
+    *,
+    bundle: EvidenceBundle,
+    validator_report_digest: str,
+    review_digests: Sequence[str],
+    expected_completion_claim_digest: str,
+    expected_acceptance_contract_digest: str,
+) -> None:
+    """Fail closed unless a real durable quorum record re-runs decide_gate to a
+    pass over sealed validator/checker objects that bind the committed evidence.
+    Never accept a self-reported checker_quorum_valid flag (design 7.4)."""
+    if not _is_digest(quorum_decision_digest):
+        raise IntegrityError("commit references an invalid quorum decision digest")
+    path = (
+        Path(store.root)
+        / "artifacts"
+        / "quorum-records"
+        / f"{quorum_decision_digest[7:]}.json"
+    )
+    try:
+        raw = path.read_bytes()
+        body = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise IntegrityError("commit references a non-durable quorum record") from exc
+    if (
+        not isinstance(body, dict)
+        or canonical_bytes(body) != raw
+        or body.get("schema_version") != QUORUM_RECORD_SCHEMA
+    ):
+        raise IntegrityError("quorum record bytes are not canonical")
+    if domain_hash(QUORUM_RECORD_DOMAIN, body) != quorum_decision_digest:
+        raise IntegrityError("quorum record digest does not match its object")
+    try:
+        validator_seal = ValidatorSeal(**body["validator_seal"])
+        policy = QuorumPolicy(**body["policy"])
+        capability_receipts = [
+            _receipt_from_body(item) for item in body["capability_receipts"]
+        ]
+        assignments = [CheckerAssignment(**item) for item in body["assignments"]]
+        reviews = [_review_from_body(item) for item in body["reviews"]]
+    except (TypeError, KeyError, ValueError, IntegrityError) as exc:
+        raise IntegrityError("quorum record is malformed") from exc
+    if (
+        validator_seal.evidence_bundle_digest != bundle.evidence_bundle_digest
+        or validator_seal.execution_evidence_cut_digest
+        != bundle.execution_evidence_cut_digest
+    ):
+        raise IntegrityError("quorum validator seal does not bind the committed evidence")
+    if validator_seal.validation_report_digest != validator_report_digest:
+        raise IntegrityError("quorum validator report digest does not match the commit")
+    if body["completion_claim_digest"] != expected_completion_claim_digest:
+        raise IntegrityError("quorum record binds a different completion claim")
+    if body["acceptance_contract_digest"] != expected_acceptance_contract_digest:
+        raise IntegrityError("quorum record binds a different acceptance contract")
+    decision = decide_gate(
+        store,
+        bundle,
+        validator_seal,
+        mission_digest=body["mission_digest"],
+        rubric_digest=body["rubric_digest"],
+        acceptance_contract_digest=body["acceptance_contract_digest"],
+        completion_claim_digest=body["completion_claim_digest"],
+        assignments=assignments,
+        reviews=reviews,
+        capability_receipts=capability_receipts,
+        policy=policy,
+    )
+    if decision.outcome != "pass":
+        raise IntegrityError(
+            "commit quorum decision did not pass: " + ",".join(decision.reasons)
+        )
+    if tuple(sorted(review_digests)) != tuple(sorted(decision.accepted_review_digests)):
+        raise IntegrityError("commit review digests do not match the accepted quorum")
+
+
 __all__ = [
     "CapabilityReceipt",
     "CheckerAssignment",
     "CheckerReview",
     "GateDecision",
     "QuorumPolicy",
+    "QUORUM_RECORD_SCHEMA",
     "assert_role_write_allowed",
     "build_checker_assignment",
     "build_checker_review",
     "decide_gate",
+    "persist_quorum_record",
+    "require_quorum_pass",
 ]
