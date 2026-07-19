@@ -280,7 +280,11 @@ def _validate_field_type(field: str, spec: str, value: Any) -> None:
         if not isinstance(value, str) or not value:
             raise IntegrityError(f"{field} must be a non-empty string")
         if spec == "digest":
-            if not value.startswith("sha256:") or len(value) != 71:
+            if (
+                not value.startswith("sha256:")
+                or len(value) != 71
+                or any(character not in "0123456789abcdef" for character in value[7:])
+            ):
                 raise IntegrityError(f"{field} must be a sha256 digest")
         elif spec == "analysis_state":
             try:

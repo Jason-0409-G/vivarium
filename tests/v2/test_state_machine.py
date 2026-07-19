@@ -335,6 +335,17 @@ class RunReducerTests(unittest.TestCase):
             reduce_run(invalid)
         self.assertEqual(reduce_run(events).run_local_state_root, before.run_local_state_root)
 
+    def test_non_hex_digest_payload_is_rejected(self):
+        # PR review P2 / audit task3a-2: a typed digest field must be strict
+        # lowercase hex, not merely "sha256:" + any 64 characters.
+        events = append_event(
+            (),
+            "RUN_LEDGER_GENESIS",
+            run_genesis_payload(merge_policy_digest="sha256:" + "z" * 64),
+        )
+        with self.assertRaises(IntegrityError):
+            reduce_run(events)
+
     def test_open_enum_value_is_reported_as_integrity_failure(self):
         events = self.prepared_run()
         invalid = append_event(
