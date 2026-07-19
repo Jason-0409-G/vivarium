@@ -35,6 +35,7 @@ from .roles import (
     build_checker_review,
     persist_quorum_record,
 )
+from .state import DependencyHead
 from .steps import run_local_step
 
 
@@ -135,10 +136,13 @@ def perform_one_step(
     stage_id: str = "stage-1",
     attempt_id: str = "attempt-1",
     commit_tx_id: str | None = None,
+    dependencies: Sequence[DependencyHead] = (),
 ) -> StepCommit:
     """Execute argv as a real local process and, on success, commit the stage into
-    the project ledger through the full validated lifecycle. On a non-success
-    execution the run is left at its failure state and nothing is committed."""
+    the project ledger through the full validated lifecycle. dependencies declares
+    the prior committed stage objects this stage builds on (the DAG edges). On a
+    non-success execution the run is left at its failure state and nothing is
+    committed."""
     commit_tx_id = commit_tx_id or f"commit:{run_id}:{stage_id}:{attempt_id}"
     execution_intent_id = f"exec:{run_id}:{stage_id}:{attempt_id}"
     result = run_local_step(
@@ -203,6 +207,7 @@ def perform_one_step(
         "checker_quorum_valid": True,
         "budget_available": True,
         "completion_success": True,
+        "dependencies": tuple(dependencies),
         **quorum,
     }
     prepared = store.prepare_commit(request)
@@ -210,4 +215,30 @@ def perform_one_step(
     return StepCommit(result, True, commit_tx_id, event, validator_outcome)
 
 
-__all__ = ["perform_one_step", "StepCommit"]
+def run_pipeline(store, stages: Sequence[dict]) -> list[StepCommit]:
+    """Drive a multi-stage DAG (e.g. prep -> compare -> phylo). Each stage is a
+    run of its own; a stage that depends on earlier stages declares DAG edges to
+    their committed stage objects, so the commit fails closed unless every upstream
+    stage is still the active committed head. Each entry is
+    {run_id, argv, depends_on: [prior run_id, ...]}.
+    """
+    committed: dict[str, str] = {}
+    results: list[StepCommit] = []
+    for stage in stages:
+        run_id = stage["run_id"]
+        if run_id not in store._registered_run_ids():
+            store.register_run(run_id, analysis_state="EXECUTION_PENDING")
+        dependencies = tuple(
+            DependencyHead("work", f"stage:{upstream}", committed[upstream])
+            for upstream in stage.get("depends_on", ())
+        )
+        step = perform_one_step(
+            store, run_id=run_id, argv=stage["argv"], dependencies=dependencies
+        )
+        if step.committed and step.stage_committed_event is not None:
+            committed[run_id] = step.stage_committed_event.payload["object_head"]
+        results.append(step)
+    return results
+
+
+__all__ = ["perform_one_step", "run_pipeline", "StepCommit"]
