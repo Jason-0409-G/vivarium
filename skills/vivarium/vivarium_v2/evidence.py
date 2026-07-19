@@ -16,6 +16,7 @@ EVIDENCE_BUNDLE_SCHEMA = "vivarium.evidence-bundle/v1"
 VALIDATOR_SEAL_SCHEMA = "vivarium.validator-seal/v1"
 WRITER_CLOSURE_DOMAIN = "vivarium-writer-closure/v1"
 REVOCATION_DOMAIN = "vivarium-capability-revocation-receipt/v1"
+EMPTY_PROVENANCE_DIGEST = domain_hash("vivarium-evidence-provenance/v1", [])
 
 
 def _is_digest(value: str) -> bool:
@@ -48,6 +49,7 @@ class EvidenceBundle:
     writer_closure_digest: str
     capability_revocation_receipt_digest: str
     sealed_by_role: str
+    provenance_digest: str = EMPTY_PROVENANCE_DIGEST
 
     def __post_init__(self) -> None:
         if self.schema_version != EVIDENCE_BUNDLE_SCHEMA:
@@ -56,6 +58,7 @@ class EvidenceBundle:
             self.execution_evidence_cut_digest,
             self.writer_closure_digest,
             self.capability_revocation_receipt_digest,
+            self.provenance_digest,
         ):
             if not _is_digest(field):
                 raise IntegrityError("evidence bundle contains an invalid digest")
@@ -84,6 +87,7 @@ class EvidenceBundle:
             "log_manifest": [entry(item) for item in self.log_manifest],
             "writer_closure_digest": self.writer_closure_digest,
             "capability_revocation_receipt_digest": self.capability_revocation_receipt_digest,
+            "provenance_digest": self.provenance_digest,
             "sealed_by_role": self.sealed_by_role,
         }
 
@@ -267,6 +271,7 @@ def seal_evidence_bundle(
     writer_closure_digest: str,
     capability_revocation_receipt_digest: str,
     authority_role: str,
+    provenance_digest: str = EMPTY_PROVENANCE_DIGEST,
 ) -> EvidenceBundle:
     if authority_role != "validator":
         raise IntegrityError("Maker cannot supply authoritative evidence roots")
@@ -306,6 +311,7 @@ def seal_evidence_bundle(
         writer_closure_digest,
         capability_revocation_receipt_digest,
         authority_role,
+        provenance_digest=provenance_digest,
     )
     path = (
         Path(store.root)

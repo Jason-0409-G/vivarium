@@ -118,6 +118,18 @@ class EvidenceSealingTests(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             validate_evidence_bundle(fixture["store"], bundle)
 
+    def test_evidence_digest_binds_provenance(self):
+        # M-13 (audit): the same payload sealed under different provenance
+        # (code/environment/request/key material) must yield a different
+        # evidence identity, so a stale review/cache cannot be mis-bound.
+        fixture = self._fixture("prov")
+        base = self._seal(fixture)
+        other = self._seal(fixture, provenance_digest="sha256:" + "a" * 64)
+        self.assertNotEqual(base.provenance_digest, other.provenance_digest)
+        self.assertNotEqual(
+            base.evidence_bundle_digest, other.evidence_bundle_digest
+        )
+
     def test_sealer_rejects_paths_outside_the_attempt_workspace(self):
         # M-15 (audit): the snapshotter was scoped to the whole project root, so
         # it could seal another run's private data or a mutable projection. Only
