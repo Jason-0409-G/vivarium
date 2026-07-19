@@ -196,6 +196,67 @@ class RunValidityTests(unittest.TestCase):
             federated(self.local_b, self.cut_A2).federated_state_root,
         )
 
+    def test_recheck_refresh_after_dependency_stale_yields_stale_slice(self):
+        # M-5: if a depended-on fact changes while a run is in
+        # COMPLETION_RECHECK_PENDING, a subsequent legal COMPLETION_PROOF_REFRESHED
+        # must yield a STALE slice — staleness dominates the restore — rather than
+        # raising, which would leave a fully legal ledger with an uncomputable run
+        # certificate (design 1070/1071/1276).
+        prefixes = genesis_prefixes()
+        prefixes["truth"] = activate(
+            prefixes["truth"], "truth", "FACT_ACTIVATED", 1, "fact-A", "A1"
+        )
+        baseline = reduce_project_cut(as_prefixes(prefixes))
+        events, evidence, prepare = prepared_run(
+            "recheck-run",
+            ({"namespace": "truth", "object_id": "fact-A", "object_head": "A1"},),
+            project_revision=baseline.project_revision,
+            project_semantic_cut_root=baseline.project_semantic_cut_root,
+        )
+        local = reduce_run(events)
+
+        def recheck_payload(revision, kind):
+            payload = commit_payload(revision, "recheck-run", prepare, evidence)
+            payload.pop("commit_tx_id")
+            payload["recheck_tx_id"] = "recheck-1"
+            payload["object_head"] = f"stage-recheck-run-{kind}"
+            payload["target_namespace"] = "work"
+            payload["target_object_id"] = "stage-recheck-run"
+            if kind == "opened":
+                payload["recheck_scope"] = "own_stage"
+            elif kind == "refreshed":
+                payload["refresh_result"] = "own_success"
+            return payload
+
+        commit = event(
+            prefixes["work"],
+            "project-work",
+            "STAGE_COMMITTED",
+            commit_payload(2, "recheck-run", prepare, evidence),
+        )
+        prefixes["work"] += (commit,)
+        opened = event(
+            prefixes["work"],
+            "project-work",
+            "COMPLETION_RECHECK_OPENED",
+            recheck_payload(3, "opened"),
+        )
+        prefixes["work"] += (opened,)
+        prefixes["truth"] = activate(
+            prefixes["truth"], "truth", "FACT_ACTIVATED", 4, "fact-A", "A2"
+        )
+        refreshed = event(
+            prefixes["work"],
+            "project-work",
+            "COMPLETION_PROOF_REFRESHED",
+            recheck_payload(5, "refreshed"),
+        )
+        prefixes["work"] += (refreshed,)
+        cut = reduce_project_cut(as_prefixes(prefixes))
+        self.assertEqual(
+            self.slice_for(local, cut).state, AnalysisState.STALE_CONTEXT
+        )
+
     def test_all_five_genesis_anchors_are_required(self):
         prefixes = genesis_prefixes()
         prefixes["memory"] = ()

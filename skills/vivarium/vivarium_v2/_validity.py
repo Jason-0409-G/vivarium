@@ -294,19 +294,30 @@ def reduce_run_validity(
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("recheck REFRESH has no matching blocker")
             blockers.remove(overlay.transaction_id)
+            # Dependency staleness observed during the recheck dominates the
+            # restore: the run stays STALE instead of transitioning back to its
+            # pre-recheck baseline, so a fully legal ledger never yields an
+            # uncomputable run certificate (design 1070/1071/1276).
+            stale = active_attempt().analysis_state in {
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }
             if blockers:
-                if guard != "refresh_blocker_removed_others_remain":
-                    raise IntegrityError("partial recheck REFRESH has the wrong typed result")
-                transition = overlay_transition(overlay, guard)
-                set_effective_state(AnalysisState(transition.to_state))
+                if not stale:
+                    if guard != "refresh_blocker_removed_others_remain":
+                        raise IntegrityError("partial recheck REFRESH has the wrong typed result")
+                    transition = overlay_transition(overlay, guard)
+                    set_effective_state(AnalysisState(transition.to_state))
             else:
                 baseline = recheck_baseline.pop(active_attempt_id, None)
                 if baseline is None:
                     raise IntegrityError("recheck REFRESH lost first-suspension baseline")
-                transition = overlay_transition(overlay, guard)
-                if AnalysisState(transition.to_state) != baseline:
-                    raise IntegrityError("recheck REFRESH does not restore first baseline")
-                set_effective_state(baseline)
+                if not stale:
+                    transition = overlay_transition(overlay, guard)
+                    if AnalysisState(transition.to_state) != baseline:
+                        raise IntegrityError("recheck REFRESH does not restore first baseline")
+                    set_effective_state(baseline)
                 operational_escalated = False
         elif overlay.event_type == "COMPLETION_PROOF_REVOKED":
             if overlay.transaction_id not in blockers:
