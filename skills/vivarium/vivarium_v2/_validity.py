@@ -218,17 +218,12 @@ def reduce_run_validity(
                 AnalysisState.STALE_COMPLETION,
             }:
                 set_effective_state(AnalysisState.STALE_CONTEXT)
-        if (
-            action.policy_digest is not None
-            and action.policy_digest != local.merge_policy_digest
-            and active_attempt().analysis_state not in {
-                AnalysisState.PLANNED,
-                AnalysisState.STALE_BRANCH,
-                AnalysisState.STALE_CONTEXT,
-                AnalysisState.STALE_COMPLETION,
-            }
-        ):
-            set_effective_state(AnalysisState.STALE_CONTEXT)
+        # Policy staleness is dependency-scoped like every other object: a locked
+        # policy that an attempt actually depends on is a (decision, object_id)
+        # entry in its frozen closure and stales it through the head-change branch
+        # above. The former global `policy_digest != merge_policy_digest` watermark
+        # staled every existing run on any unrelated POLICY_LOCKED, violating the
+        # precise-cascade invariant (design 1276/2399); it is intentionally gone.
         overlay = action.overlay
         relation = action_relation(action)
         if overlay is None or relation is None:
@@ -389,10 +384,14 @@ def reduce_run_validity(
         set_effective_state(AnalysisState.ESCALATED)
         operational_escalated = True
         active = active_attempt()
+    # The relevant-input root is dependency-scoped: a policy the attempt actually
+    # depends on is a (decision, object_id) entry already present in
+    # ordered_relevant, so it moves the root when it changes. Embedding the global
+    # locked_policy_digest here would move every run's slice on any unrelated
+    # POLICY_LOCKED, breaking the precise-cascade invariant (design 2399).
     relevant_root = domain_hash(
         RELEVANT_PROJECT_INPUT_DOMAIN,
         {
-            "locked_policy_digest": validity.locked_policy_digest,
             "relevant_project_inputs": [
                 {
                     "namespace": item.namespace,

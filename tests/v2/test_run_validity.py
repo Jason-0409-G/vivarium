@@ -11,6 +11,8 @@ from skills.vivarium.vivarium_v2.reducers import (
 )
 from skills.vivarium.vivarium_v2.state import AnalysisState, ProjectPrefixes
 from tests.v2.test_federated_recovery import (
+    HASH_C,
+    HASH_D,
     LEDGERS,
     as_prefixes,
     commit_payload,
@@ -84,10 +86,93 @@ class RunValidityTests(unittest.TestCase):
             prefixes["truth"], "truth", "FACT_ACTIVATED", 5, "fact-A", "A2"
         )
         self.cut_A2 = reduce_project_cut(as_prefixes(prefixes))
+        self.prefixes = prefixes
 
     def slice_for(self, local, cut):
         validity = reduce_project_validity(cut)
         return reduce_run_validity(cut, validity, local)
+
+    def _policy_lock(self, decision_prefix, revision, object_id, object_head, policy_digest):
+        locked = event(
+            decision_prefix,
+            LEDGERS["decision"][0],
+            "POLICY_LOCKED",
+            {
+                "project_revision": revision,
+                "object_type": "decision",
+                "object_id": object_id,
+                "object_head": object_head,
+                "dependencies": [],
+                "locked_policy_digest": policy_digest,
+            },
+        )
+        return (*decision_prefix, locked)
+
+    def test_unrelated_policy_lock_does_not_stale_independent_run(self):
+        # M-3: locking a new, unrelated policy must not stale a run whose frozen
+        # dependency closure does not include that policy object — only runs that
+        # actually depend on the changed policy stale (design 1276/2399). The
+        # dependency-blind global policy watermark staled every existing run.
+        prefixes = dict(self.prefixes)
+        prefixes["decision"] = self._policy_lock(
+            prefixes["decision"], 6, "policy-unrelated", "PQ1", HASH_C
+        )
+        cut = reduce_project_cut(as_prefixes(prefixes))
+        self.assertEqual(
+            self.slice_for(self.local_b, cut).state, AnalysisState.COMMITTED
+        )
+
+    def test_unrelated_policy_lock_keeps_slice_root_byte_identical(self):
+        # M-4: an unrelated policy lock must not move an independent run's
+        # validity slice — the relevant-input root must be dependency-scoped and
+        # must not embed the global locked policy digest (design 2399: unrelated
+        # policy scope changes keep the run slice byte-identical).
+        before = self.slice_for(self.local_b, self.cut_A2)
+        prefixes = dict(self.prefixes)
+        prefixes["decision"] = self._policy_lock(
+            prefixes["decision"], 6, "policy-unrelated", "PQ1", HASH_C
+        )
+        after = self.slice_for(self.local_b, reduce_project_cut(as_prefixes(prefixes)))
+        self.assertEqual(
+            before.relevant_project_validity_input_root,
+            after.relevant_project_validity_input_root,
+        )
+        self.assertEqual(before.run_validity_slice_root, after.run_validity_slice_root)
+
+    def test_policy_dependent_run_stales_when_its_policy_superseded(self):
+        # M-3 guard: a run that DOES depend on a policy object still stales when
+        # that policy is superseded, through the dependency-closure path — so
+        # dropping the global watermark does not under-stale.
+        prefixes = genesis_prefixes()
+        prefixes["decision"] = self._policy_lock(
+            prefixes["decision"], 1, "policy-P", "P1", HASH_C
+        )
+        baseline = reduce_project_cut(as_prefixes(prefixes))
+        events, evidence, prepare = prepared_run(
+            "depends-P",
+            ({"namespace": "decision", "object_id": "policy-P", "object_head": "P1"},),
+            project_revision=baseline.project_revision,
+            project_semantic_cut_root=baseline.project_semantic_cut_root,
+        )
+        local = reduce_run(events)
+        commit = event(
+            prefixes["work"],
+            "project-work",
+            "STAGE_COMMITTED",
+            commit_payload(2, "depends-P", prepare, evidence),
+        )
+        prefixes["work"] += (commit,)
+        committed_cut = reduce_project_cut(as_prefixes(prefixes))
+        self.assertEqual(
+            self.slice_for(local, committed_cut).state, AnalysisState.COMMITTED
+        )
+        prefixes["decision"] = self._policy_lock(
+            prefixes["decision"], 3, "policy-P", "P2", HASH_D
+        )
+        superseded_cut = reduce_project_cut(as_prefixes(prefixes))
+        self.assertEqual(
+            self.slice_for(local, superseded_cut).state, AnalysisState.STALE_CONTEXT
+        )
 
     def test_fact_change_stales_only_dependent_run(self):
         self.assertEqual(
