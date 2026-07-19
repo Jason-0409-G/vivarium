@@ -30,3 +30,6 @@ Rplots.pdf
 *.log
 /tmp/
 benchmark_runs/
+
+# local-only push log (per user: a local markdown record after each push)
+PUSH_LOG.md
