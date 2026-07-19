@@ -10,6 +10,9 @@ from skills.vivarium.vivarium_v2.execution import (
     ExecutionEvidenceCut,
     ExecutionIntent,
     ProcessReceipt,
+    build_completion_proof,
+    classify_completion,
+    persist_completion_proof,
     persist_execution_authority_object,
     persist_execution_evidence_cut,
 )
@@ -71,9 +74,10 @@ def _seal_commit_evidence(store, tx_id, run_id="run-1", **quorum_overrides):
     (workspace / "result.txt").write_bytes(b"result\n")
     (workspace / "execution.log").write_bytes(b"complete\n")
     relative = lambda path: path.relative_to(store.root).as_posix()
-    cut_digest = persist_execution_evidence_cut(
-        store, execution_evidence_cut(run_id=run_id)
-    )
+    cut = execution_evidence_cut(run_id=run_id)
+    cut_digest = persist_execution_evidence_cut(store, cut)
+    proof = build_completion_proof(classify_completion(cut), cut)
+    proof_digest = persist_completion_proof(store, proof)
     bundle = seal_evidence_bundle(
         store,
         **identity,
@@ -91,7 +95,14 @@ def _seal_commit_evidence(store, tx_id, run_id="run-1", **quorum_overrides):
     return {
         "evidence_bundle_digest": bundle.evidence_bundle_digest,
         "execution_evidence_cut_digest": cut_digest,
-        **_seal_commit_quorum(store, tx_id, bundle, **quorum_overrides),
+        "completion_proof_digest": proof_digest,
+        **_seal_commit_quorum(
+            store,
+            tx_id,
+            bundle,
+            completion_claim_digest=proof.completion_claim_digest,
+            **quorum_overrides,
+        ),
     }
 
 
@@ -100,6 +111,7 @@ def _seal_commit_quorum(
     tx_id,
     bundle,
     *,
+    completion_claim_digest,
     review_outcome="pass",
     review_severities=(),
     isolation_level="hard",
@@ -115,7 +127,6 @@ def _seal_commit_quorum(
     mission_digest = gate("mission")
     rubric_digest = gate("rubric")
     acceptance_contract_digest = gate("acceptance")
-    completion_claim_digest = gate("claim")
     receipt = CapabilityReceipt(
         receipt_id=f"receipt-{tx_id}",
         role="checker",

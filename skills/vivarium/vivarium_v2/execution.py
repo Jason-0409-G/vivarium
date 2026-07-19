@@ -521,6 +521,58 @@ def build_completion_proof(
     )
 
 
+def persist_completion_proof(store: Any, proof: CompletionProof) -> str:
+    digest = proof.completion_proof_digest
+    durable_replace(
+        Path(store.root) / "artifacts" / "completion-proofs" / f"{digest[7:]}.json",
+        canonical_bytes(proof._canonical_body()),
+    )
+    return digest
+
+
+def require_durable_completion_proof(
+    store: Any,
+    completion_proof_digest: str,
+    *,
+    expected_cut_digest: str,
+    expected_claim_digest: str,
+) -> None:
+    """Fail closed unless the commit's completion_proof_digest resolves to a real
+    durable CompletionProof whose digest re-derives from its own bytes and whose
+    evidence cut + completion claim match the committed authority. The commit must
+    never record a proof digest that no persisted object backs (design 7.4 step 6:
+    re-derive completion_proof_digest from durable bytes, not an in-memory value)."""
+    if not _is_digest(completion_proof_digest):
+        raise IntegrityError("commit references an invalid completion proof digest")
+    path = (
+        Path(store.root)
+        / "artifacts"
+        / "completion-proofs"
+        / f"{completion_proof_digest[7:]}.json"
+    )
+    try:
+        raw = path.read_bytes()
+        body = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise IntegrityError("commit references a non-durable completion proof") from exc
+    if (
+        not isinstance(body, dict)
+        or canonical_bytes(body) != raw
+        or body.get("schema_version") != COMPLETION_PROOF_SCHEMA
+    ):
+        raise IntegrityError("completion proof bytes are not canonical")
+    try:
+        proof = CompletionProof(**body)
+    except (TypeError, ValueError, IntegrityError) as exc:
+        raise IntegrityError("completion proof is malformed") from exc
+    if proof.completion_proof_digest != completion_proof_digest:
+        raise IntegrityError("completion proof digest does not match its object")
+    if proof.execution_evidence_cut_digest != expected_cut_digest:
+        raise IntegrityError("completion proof is not bound to the committed evidence cut")
+    if proof.completion_claim_digest != expected_claim_digest:
+        raise IntegrityError("completion proof binds a different completion claim")
+
+
 @dataclass(frozen=True)
 class LocalExecutionResult:
     intent: ExecutionIntent
@@ -1138,7 +1190,9 @@ __all__ = [
     "build_completion_proof",
     "classify_completion",
     "complete_agent_only",
+    "persist_completion_proof",
     "persist_execution_authority_object",
     "persist_execution_evidence_cut",
+    "require_durable_completion_proof",
     "require_success_completion",
 ]

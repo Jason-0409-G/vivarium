@@ -184,6 +184,38 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request(**evidence))
 
+    def test_c1_commit_rejects_a_non_durable_completion_proof(self):
+        # M-6: completion_proof_digest must resolve to a real durable
+        # CompletionProof whose digest re-derives from its bytes — a fabricated
+        # proof digest backed by no on-disk object must fail closed.
+        from skills.vivarium.vivarium_v2.canonical import domain_hash
+
+        store = self._store("no-proof", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        evidence["completion_proof_digest"] = domain_hash("vivarium-forged/v1", {"x": 1})
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
+    def test_c1_commit_rejects_a_completion_proof_for_a_different_cut(self):
+        # M-6: the durable completion proof must be bound to the committed
+        # evidence cut — a real proof built for a different cut cannot certify
+        # this commit.
+        from skills.vivarium.vivarium_v2.execution import (
+            build_completion_proof,
+            classify_completion,
+            persist_completion_proof,
+        )
+
+        store = self._store("wrong-cut-proof", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        other = execution_evidence_cut(run_id="run-1", stage_id="stage-other")
+        persist_execution_evidence_cut(store, other)
+        evidence["completion_proof_digest"] = persist_completion_proof(
+            store, build_completion_proof(classify_completion(other), other)
+        )
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False
