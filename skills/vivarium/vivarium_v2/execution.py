@@ -418,6 +418,52 @@ def classify_completion(cut: ExecutionEvidenceCut) -> CompletionClassification:
     )
 
 
+_CUT_TUPLE_FIELDS = ("terminal_evidence_refs", "failure_flags", "absence_evidence")
+
+
+def _reconstruct_execution_evidence_cut(body: dict[str, Any]) -> ExecutionEvidenceCut:
+    fields = dict(body)
+    for key in _CUT_TUPLE_FIELDS:
+        fields[key] = tuple(fields.get(key, ()))
+    return ExecutionEvidenceCut(**fields)
+
+
+def persist_execution_evidence_cut(store: Any, cut: ExecutionEvidenceCut) -> str:
+    digest = cut.execution_evidence_cut_digest
+    durable_replace(
+        Path(store.root) / "artifacts" / "execution-cuts" / f"{digest[7:]}.json",
+        canonical_bytes(cut._canonical_body()),
+    )
+    return digest
+
+
+def require_success_completion(store: Any, execution_evidence_cut_digest: str) -> None:
+    """Fail closed unless a real durable ExecutionEvidenceCut classifies as
+    success. The commit path must derive success from a re-run of the frozen
+    classifier, never from a self-reported flag (design 12.6 / 7.4)."""
+    path = (
+        Path(store.root)
+        / "artifacts"
+        / "execution-cuts"
+        / f"{execution_evidence_cut_digest[7:]}.json"
+    )
+    try:
+        raw = path.read_bytes()
+        body = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise IntegrityError("commit references a non-durable execution evidence cut") from exc
+    if not isinstance(body, dict) or canonical_bytes(body) != raw:
+        raise IntegrityError("execution evidence cut bytes do not match their object")
+    try:
+        cut = _reconstruct_execution_evidence_cut(body)
+    except (TypeError, IntegrityError) as exc:
+        raise IntegrityError("execution evidence cut is malformed") from exc
+    if cut.execution_evidence_cut_digest != execution_evidence_cut_digest:
+        raise IntegrityError("execution evidence cut digest does not match its object")
+    if classify_completion(cut).outcome != "success":
+        raise IntegrityError("commit requires a re-classified success completion")
+
+
 _SUCCESS_GRADE_BY_KIND = {
     "agent_only": "authoritative_agent_harness",
     "local_process": "authoritative_local_process",
@@ -1084,4 +1130,6 @@ __all__ = [
     "classify_completion",
     "complete_agent_only",
     "persist_execution_authority_object",
+    "persist_execution_evidence_cut",
+    "require_success_completion",
 ]

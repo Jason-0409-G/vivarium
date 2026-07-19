@@ -11,6 +11,7 @@ from skills.vivarium.vivarium_v2.execution import (
     ExecutionIntent,
     ProcessReceipt,
     persist_execution_authority_object,
+    persist_execution_evidence_cut,
 )
 from skills.vivarium.vivarium_v2.evidence import (
     persist_writer_closure,
@@ -48,7 +49,7 @@ def fixture_store_at_revision(root: Path, revision: int) -> ProjectStore:
     return store
 
 
-def _seal_commit_bundle(store, tx_id):
+def _seal_commit_evidence(store, tx_id):
     identity = {
         "run_id": "run-1",
         "stage_id": f"stage-{tx_id}",
@@ -84,7 +85,12 @@ def _seal_commit_bundle(store, tx_id):
         ),
         authority_role="validator",
     )
-    return bundle.evidence_bundle_digest
+    return {
+        "evidence_bundle_digest": bundle.evidence_bundle_digest,
+        "execution_evidence_cut_digest": persist_execution_evidence_cut(
+            store, execution_evidence_cut()
+        ),
+    }
 
 
 def valid_prepared_commit(
@@ -92,10 +98,10 @@ def valid_prepared_commit(
 ) -> PreparedCommit:
     if not store.capture()[1]:
         store.register_run(run_id, analysis_state="COLLECTING")
-    if "evidence_bundle_digest" not in overrides:
-        overrides["evidence_bundle_digest"] = _seal_commit_bundle(
-            store, overrides.get("commit_tx_id", "commit-1")
-        )
+    for key, value in _seal_commit_evidence(
+        store, overrides.get("commit_tx_id", "commit-1")
+    ).items():
+        overrides.setdefault(key, value)
     return store.prepare_commit(valid_commit_request(run_id, **overrides))
 
 

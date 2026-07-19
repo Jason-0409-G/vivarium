@@ -15,6 +15,7 @@ from .canonical import canonical_bytes, domain_hash, durable_replace
 from .errors import IntegrityError
 from .evidence import require_durable_evidence_bundle
 from .events import Event, ZERO_HASH
+from .execution import require_success_completion
 from .ledger import Ledger
 from .reducers import federate, reduce_project_cut, reduce_project_validity, reduce_run, reduce_run_validity
 from .state import (
@@ -537,7 +538,7 @@ class ProjectStore:
             str(request["completion_claim_digest"]),
             str(request["completion_proof_digest"]),
             str(request.get("completion_grade", "L1")),
-            digest("execution_evidence_cut_digest"),
+            str(request.get("execution_evidence_cut_digest", digest("execution_evidence_cut_digest"))),
             str(request["validator_report_digest"]),
             tuple(sorted(request["review_digests"])),
             str(request["quorum_decision_digest"]),
@@ -594,6 +595,7 @@ class ProjectStore:
         ):
             raise IntegrityError("commit intent does not authorize a success preparation")
         require_durable_evidence_bundle(self, prepared.evidence_bundle_digest)
+        require_success_completion(self, prepared.execution_evidence_cut_digest)
         self._write_artifact(prepared)
         run_ledger = self._run_ledger(prepared.run_id)
 

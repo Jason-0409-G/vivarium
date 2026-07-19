@@ -7,7 +7,9 @@ from skills.vivarium.vivarium_v2.events import ZERO_HASH
 from skills.vivarium.vivarium_v2.project import ProjectStore
 from tests.v2.support import (
     FrozenClock,
-    _seal_commit_bundle,
+    _seal_commit_evidence,
+    execution_evidence_cut,
+    persist_execution_evidence_cut,
     prepared_fixture,
     valid_commit_request,
     valid_prepared_commit,
@@ -32,9 +34,7 @@ class Task4FrozenReviewFixes(unittest.TestCase):
     def test_c1_commit_rejects_synthesized_authority_defaults(self):
         store = self._store("authority", state="COMMITTING")
         prepared = store.prepare_commit(
-            valid_commit_request(
-                evidence_bundle_digest=_seal_commit_bundle(store, "commit-1")
-            )
+            valid_commit_request(**_seal_commit_evidence(store, "commit-1"))
         )
         with self.assertRaises(IntegrityError):
             store.complete_commit(prepared)
@@ -47,6 +47,18 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request())
 
+    def test_c1_commit_rejects_a_non_success_completion(self):
+        # C-1 (increment 2): the commit outcome must be re-classified from a
+        # real ExecutionEvidenceCut, never asserted. A failure cut (OOM) cannot
+        # be committed as a success.
+        store = self._store("failure-cut")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        evidence["execution_evidence_cut_digest"] = persist_execution_evidence_cut(
+            store, execution_evidence_cut(exit_code=137, oom=True)
+        )
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False
@@ -57,10 +69,10 @@ class Task4FrozenReviewFixes(unittest.TestCase):
                 fired = True
                 raise RuntimeError("crash")
 
-        digest = _seal_commit_bundle(store, "commit-1")
+        evidence = _seal_commit_evidence(store, "commit-1")
         store.fault_injector = crash
         with self.assertRaises(RuntimeError):
-            store.prepare_commit(valid_commit_request(evidence_bundle_digest=digest))
+            store.prepare_commit(valid_commit_request(**evidence))
         store.fault_injector = None
         roots = [store.recover().federated_state_root for _ in range(3)]
         self.assertEqual(len(set(roots)), 1)
