@@ -370,10 +370,25 @@ def validate_evidence_bundle(
     )
 
 
+def _evidence_bundle_from_body(body: Mapping[str, Any]) -> EvidenceBundle:
+    """Reconstruct an EvidenceBundle from its canonical body, re-running every
+    dataclass invariant. Malformed or non-bundle JSON raises here rather than
+    silently passing a weaker check."""
+    manifest = lambda items: tuple(EvidenceFile(**item) for item in items)
+    fields = dict(body)
+    fields["payload_manifest"] = manifest(fields["payload_manifest"])
+    fields["log_manifest"] = manifest(fields["log_manifest"])
+    return EvidenceBundle(**fields)
+
+
 def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> None:
-    """Fail closed unless a real sealed EvidenceBundle object exists at the
-    referenced digest. The commit path must never accept a fabricated bundle
-    digest that points to nothing (design 7.4)."""
+    """Fail closed unless a real, fully-valid validator-sealed EvidenceBundle
+    exists at the referenced digest. Round-tripping the canonical bytes is not
+    enough: the object must reconstruct into an EvidenceBundle (re-running its
+    invariants) and pass validate_evidence_bundle (content-addressed evidence
+    artifacts, writer closure, capability revocation must all exist). A canonical
+    but forged JSON blob that merely self-hashes and claims sealed_by_role must
+    not be accepted (design 7.4)."""
     if not _is_digest(evidence_bundle_digest):
         raise IntegrityError("commit references an invalid evidence bundle digest")
     path = (
@@ -387,13 +402,15 @@ def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> 
         body = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise IntegrityError("commit references a non-durable evidence bundle") from exc
-    if (
-        not isinstance(body, dict)
-        or canonical_bytes(body) != raw
-        or domain_hash("vivarium-evidence-bundle/v1", body) != evidence_bundle_digest
-        or body.get("sealed_by_role") != "validator"
-    ):
-        raise IntegrityError("durable evidence bundle bytes do not match the referenced digest")
+    if not isinstance(body, dict) or canonical_bytes(body) != raw:
+        raise IntegrityError("durable evidence bundle bytes are not canonical")
+    try:
+        bundle = _evidence_bundle_from_body(body)
+    except (TypeError, KeyError, ValueError, IntegrityError) as exc:
+        raise IntegrityError("durable evidence bundle is malformed") from exc
+    if bundle.evidence_bundle_digest != evidence_bundle_digest:
+        raise IntegrityError("durable evidence bundle digest does not match its object")
+    validate_evidence_bundle(store, bundle)
 
 
 def seal_validator_evidence(

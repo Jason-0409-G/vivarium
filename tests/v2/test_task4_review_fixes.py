@@ -47,6 +47,33 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request())
 
+    def test_c1_commit_rejects_a_persisted_fabricated_bundle_json(self):
+        # C-1 (increment 1, reworked): a canonical, self-hashing JSON blob that
+        # is NOT a genuine validator-sealed EvidenceBundle — it neither
+        # reconstructs into an EvidenceBundle nor has content-addressed evidence
+        # artifacts — must be rejected by the durable-bundle gate, even though it
+        # round-trips its own digest and claims sealed_by_role=validator. The
+        # inline four-check version accepted exactly this forgery.
+        from skills.vivarium.vivarium_v2.canonical import (
+            canonical_bytes,
+            domain_hash,
+            durable_replace,
+        )
+        from skills.vivarium.vivarium_v2.evidence import require_durable_evidence_bundle
+
+        store = self._store("fabricated-bundle-json")
+        body = {"sealed_by_role": "validator", "totally": "fabricated"}
+        digest = domain_hash("vivarium-evidence-bundle/v1", body)
+        durable_replace(
+            Path(store.root)
+            / "artifacts"
+            / "evidence-bundles"
+            / f"{digest[7:]}.json",
+            canonical_bytes(body),
+        )
+        with self.assertRaises(IntegrityError):
+            require_durable_evidence_bundle(store, digest)
+
     def test_c1_commit_rejects_a_non_success_completion(self):
         # C-1 (increment 2): the commit outcome must be re-classified from a
         # real ExecutionEvidenceCut, never asserted. A failure cut (OOM) cannot
