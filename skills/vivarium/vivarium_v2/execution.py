@@ -368,6 +368,7 @@ def _success_authority(cut: ExecutionEvidenceCut) -> str | None:
             bool(cut.process_or_job_ref)
             and "process_exited" in cut.absence_evidence
             and _is_digest(cut.local_executor_identity_digest)
+            and _is_digest(cut.sentinel_digest)
         )
         return "local_process_receipt" if required else None
     if cut.execution_kind == "scheduler_job":

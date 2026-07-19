@@ -17,6 +17,12 @@ class CompletionProofGradeTests(unittest.TestCase):
         self.assertEqual(proof.success_grade, "authoritative_local_process")
         self.assertNotEqual(proof.success_grade, "L1")
 
+    def test_local_success_requires_a_valid_sentinel(self):
+        # M-12 (audit): local_process success ignored the sentinel, unlike the
+        # scheduler branch. A local cut without a valid sentinel is not success.
+        cut = execution_evidence_cut(sentinel_digest="sentinel-missing")
+        self.assertEqual(classify_completion(cut).outcome, "unknown_finality")
+
 
 if __name__ == "__main__":
     unittest.main()
