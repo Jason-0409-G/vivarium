@@ -275,3 +275,28 @@
 5. **修正文档事实错误**：Task 6 的“未提交草稿/不提交”状态与仓库不符（drafts 已入库、12 测试全过）；`docs` 中“独立审查 已完成”的勾选在无独立审查证据前应撤回。
 
 **底线**：测试全绿 137/137 是好的起点，但本次独立审计在 codex 自审声明“0 Critical”的 task 中确认了 4 个由合法输入触发的 critical 缺陷（含永久毒化 store 与伪造提交授权），以及 15 个 major。在 C-1~C-4 修复并经独立审查前，这套代码不安全，不能合并。
+
+---
+
+## 修复结论（2026-07-20 追加）
+
+全部修复均 TDD（先写会失败的 RED 测试再修），逐个 push，套件从 137 增长到 **163/163 全绿**。
+
+**4 个 Critical — 全部修复并经独立对抗复验：**
+- **C-2**（`fd1215d` + `507c777` 返工）、**C-3**（`baa1706`）、**C-4**（`1562c00`）：见首轮 6-agent 复验，抓到 C-2/hex 两处欠修已返工。
+- **C-1**（`63210f7`→`6a12c38` 返工→`27ba1bb`→`7349d25`→`8990c2c`→`4cabff8`）：提交路径不再合成授权链。现在 `_resume_preparation` 在铸造任何 SEALED 事件前必须过四道从持久对象重派生、交叉绑定到被提交 run/cut/claim/contract 的门：
+  1. `require_durable_evidence_bundle` — 重建 `EvidenceBundle` + `validate_evidence_bundle`（内容寻址证据/writer/revocation 必须存在），绑 run；
+  2. `require_success_completion` — 加载真实 `ExecutionEvidenceCut`、重跑冻结 `classify_completion`=success，绑 run，且 == bundle 密封的 cut；
+  3. `require_quorum_pass` — 加载 durable `QuorumRecord`、重建 validator seal/policy/receipts/assignments/reviews、**重跑 `decide_gate`=pass**，绑 evidence/claim/contract；
+  4. `require_durable_completion_proof`（M-6）— 加载 durable `CompletionProof`、从字节重派生 digest、**再从 cut 重派生整个 proof body 并断言相等**。
+  - 3 轮对抗复验（首轮抓到 Inc1 内联弱检查可被垃圾 JSON 绕过→返工；第 2 轮 25+ 攻击全 fail-closed，判 SOLID，2 处 minor 已补；第 3 轮 M-6 判 SOLID）。
+
+**Major — 已修 8 个：** M-1（`1c4b14b`/`d5aca62`）、M-6（`38bd81b`/`bcab6e6`）、M-11（`fb96da1`）、M-12（`03214bb`）、M-13（`5a4a27a`）、M-15（`120f7e4`），加非 hex digest minor（`49db775`/`e576b0d` 返工）。
+
+**未修（诚实边界，均为高风险/纠缠/需新模型/需 Task 5，刻意未在无监督过夜里硬赶）：**
+- **M-10**（proof per-kind oneOf）：有真实设计张力——分类器 `_success_authority.required_common` 要求所有 kind 的 `profile_digest` 非-null，但本报告 §12.6 引用要 agent_only 的 profile=null；正确修需同时协调分类器（C-1 依赖）+ builder + fixture。**M-9** 同源（success cut 的 `absence_evidence` 应为空）。
+- **M-3/M-4/M-5**（validity 皇冠不变量，改错破坏精准级联失效）、**M-2**（intake blocker 写侧）、**M-14**（namespace attestation 可伪造，需真实 Orchestrator 签名 = Task 5）。
+- **提交链剩余自报值**：`budget_digest` / `payload_root_digest` 仍只做内部一致性校验，做实需 durable budget-ledger + 重派生 payload manifest 模型（新特性）。
+- **对象真实性 vs 形状**：无真实 Orchestrator/Checker daemon 前，调用方仍能自造"形状正确"的 durable 对象；commit-gate 已逐级抬高门槛，真正闭合靠 Task 5 能力隔离（只有真实角色 UID 能封存）。
+
+**合并状态**：分支是 master 的干净 fast-forward（领先 38、落后 0）。4 个 critical 全闭合 + 复验 SOLID 后，合并的 critical 门已过；剩余 major 属高风险/新特性，随分支带入 master 不会使 master 变差。真正的独立代码审查（§18 门禁）建议在合并前由用户触发 `/code-review ultra`。
