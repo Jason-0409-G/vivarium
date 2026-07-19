@@ -12,6 +12,16 @@ from skills.vivarium.vivarium_v2.execution import (
     ProcessReceipt,
     persist_execution_authority_object,
 )
+from skills.vivarium.vivarium_v2.evidence import (
+    persist_writer_closure,
+    seal_evidence_bundle,
+    seal_validator_evidence,
+)
+from skills.vivarium.vivarium_v2.roles import (
+    CapabilityReceipt,
+    build_checker_assignment,
+    build_checker_review,
+)
 
 
 class FrozenClock:
@@ -261,6 +271,133 @@ class FakeLocalHarness:
         return {"observed_descendant_count": 0, "containment_refs": ()}
 
 
+def evidence_sealing_fixture(root: Path):
+    store = ProjectStore.init(root, FrozenClock("2026-07-19T00:00:00Z"))
+    store.register_run("run-1", analysis_state="COLLECTING")
+    directory = (
+        store.root
+        / "runs"
+        / "run-1"
+        / "attempts"
+        / "stage-1"
+        / "attempt-1"
+        / "workspace"
+    )
+    directory.mkdir(parents=True)
+    payload_a = directory / "a-result.txt"
+    payload_b = directory / "b-result.txt"
+    log = directory / "execution.log"
+    payload_a.write_bytes(b"alpha\n")
+    payload_b.write_bytes(b"beta\n")
+    log.write_bytes(b"complete\n")
+    identity = {
+        "run_id": "run-1",
+        "stage_id": "stage-1",
+        "attempt_id": "attempt-1",
+        "execution_intent_id": "execution-1",
+    }
+    writer_closure_digest = persist_writer_closure(
+        store, {**identity, "writer_closed": True}
+    )
+    revocation_digest = persist_execution_authority_object(
+        store, "capability-revocation", {**identity, "revoked": True}
+    )
+    relative = lambda path: path.relative_to(store.root).as_posix()
+    return {
+        "store": store,
+        "directory": directory,
+        "payload_paths": (relative(payload_b), relative(payload_a)),
+        "log_paths": (relative(log),),
+        "identity": identity,
+        "execution_evidence_cut_digest": domain_hash(
+            "vivarium-test-evidence-cut/v1", identity
+        ),
+        "writer_closure_digest": writer_closure_digest,
+        "capability_revocation_receipt_digest": revocation_digest,
+    }
+
+
+def sealed_role_fixture(root: Path):
+    fixture = evidence_sealing_fixture(root)
+    bundle = seal_evidence_bundle(
+        fixture["store"],
+        **fixture["identity"],
+        execution_evidence_cut_digest=fixture["execution_evidence_cut_digest"],
+        payload_paths=fixture["payload_paths"],
+        log_paths=fixture["log_paths"],
+        writer_closure_digest=fixture["writer_closure_digest"],
+        capability_revocation_receipt_digest=fixture[
+            "capability_revocation_receipt_digest"
+        ],
+        authority_role="validator",
+    )
+    validator_seal = seal_validator_evidence(
+        fixture["store"],
+        bundle,
+        validator_id="validator-1",
+        validation_outcome="pass",
+        findings={"hard_gates": "pass"},
+    )
+    fixture.update(
+        {
+            "bundle": bundle,
+            "validator_seal": validator_seal,
+            "mission_digest": domain_hash("vivarium-test-mission/v1", {}),
+            "rubric_digest": domain_hash("vivarium-test-rubric/v1", {}),
+            "acceptance_contract_digest": domain_hash(
+                "vivarium-test-acceptance-contract/v1", {}
+            ),
+            "completion_claim_digest": domain_hash(
+                "vivarium-test-completion-claim/v1", {}
+            ),
+        }
+    )
+    return fixture
+
+
+def checker_receipt(
+    checker_id: str = "checker-1",
+    namespace: str = "checker-namespace-1",
+    **overrides,
+) -> CapabilityReceipt:
+    values = {
+        "receipt_id": f"receipt-{checker_id}",
+        "role": "checker",
+        "principal_id": checker_id,
+        "capability_namespace": namespace,
+        "granted_capabilities": ("checker_review_write",),
+        "live_capabilities": (),
+        "unresolved_capabilities": (),
+        "isolation_level": "hard",
+    }
+    values.update(overrides)
+    return CapabilityReceipt(**values)
+
+
+def checker_assignment(fixture, receipt, assignment_id="assignment-1", **overrides):
+    packet = {
+        "assignment_id": assignment_id,
+        "checker_id": receipt.principal_id,
+        "capability_namespace": receipt.capability_namespace,
+        "mission_digest": fixture["mission_digest"],
+        "rubric_digest": fixture["rubric_digest"],
+        "acceptance_contract_digest": fixture["acceptance_contract_digest"],
+        "evidence_bundle_digest": fixture["bundle"].evidence_bundle_digest,
+        "execution_evidence_cut_digest": fixture[
+            "bundle"
+        ].execution_evidence_cut_digest,
+        "validator_seal_digest": fixture["validator_seal"].validator_seal_digest,
+        "completion_claim_digest": fixture["completion_claim_digest"],
+        "capability_receipt_digest": receipt.capability_receipt_digest,
+    }
+    packet.update(overrides)
+    return build_checker_assignment(packet, receipt)
+
+
+def passing_checker_review(assignment, receipt, **overrides):
+    return build_checker_review(assignment, receipt, **overrides)
+
+
 def inject_once(store: ProjectStore, point: str) -> None:
     if point not in COMMIT_CRASH_POINTS:
         raise ValueError(point)
@@ -291,6 +428,11 @@ __all__ = [
     "agent_only_intent",
     "fixture_store_at_revision",
     "execution_evidence_cut",
+    "evidence_sealing_fixture",
+    "sealed_role_fixture",
+    "checker_receipt",
+    "checker_assignment",
+    "passing_checker_review",
     "local_execution_intent",
     "inject_once",
     "prepared_fixture",
