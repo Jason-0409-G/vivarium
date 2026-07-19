@@ -417,6 +417,13 @@ def classify_completion(cut: ExecutionEvidenceCut) -> CompletionClassification:
     )
 
 
+_SUCCESS_GRADE_BY_KIND = {
+    "agent_only": "authoritative_agent_harness",
+    "local_process": "authoritative_local_process",
+    "scheduler_job": "authoritative_accounting",
+}
+
+
 def build_completion_proof(
     classification: CompletionClassification, cut: ExecutionEvidenceCut
 ) -> CompletionProof:
@@ -425,6 +432,10 @@ def build_completion_proof(
         raise IntegrityError("completion classification does not bind the evidence cut")
     if classification.outcome != "success":
         raise IntegrityError("completion proofs may only be built for success")
+    try:
+        success_grade = _SUCCESS_GRADE_BY_KIND[cut.execution_kind]
+    except KeyError as exc:
+        raise IntegrityError("completion proof has no grade for execution kind") from exc
     claim_digest = domain_hash(
         "vivarium-completion-claim/v1",
         {
@@ -440,7 +451,7 @@ def build_completion_proof(
         classification.completion_classification_digest,
         claim_digest,
         cut.execution_kind,
-        "L1",
+        success_grade,
         classification.authority,
         cut.execution_evidence_cut_digest,
         cut.maker_harness_identity_digest,
