@@ -196,12 +196,11 @@ class RunValidityTests(unittest.TestCase):
             federated(self.local_b, self.cut_A2).federated_state_root,
         )
 
-    def test_recheck_refresh_after_dependency_stale_yields_stale_slice(self):
-        # M-5: if a depended-on fact changes while a run is in
-        # COMPLETION_RECHECK_PENDING, a subsequent legal COMPLETION_PROOF_REFRESHED
-        # must yield a STALE slice — staleness dominates the restore — rather than
-        # raising, which would leave a fully legal ledger with an uncomputable run
-        # certificate (design 1070/1071/1276).
+    def _stale_recheck_terminal(self, terminal_kind, terminal_event_type):
+        # STAGE_COMMITTED -> RECHECK_OPENED(own_stage) -> FACT_ACTIVATED(depended-on)
+        # -> <terminal>: the depended-on fact changing mid-recheck flips the run
+        # to STALE_CONTEXT; the terminal recheck event must not raise. Returns the
+        # resulting slice state.
         prefixes = genesis_prefixes()
         prefixes["truth"] = activate(
             prefixes["truth"], "truth", "FACT_ACTIVATED", 1, "fact-A", "A1"
@@ -226,6 +225,8 @@ class RunValidityTests(unittest.TestCase):
                 payload["recheck_scope"] = "own_stage"
             elif kind == "refreshed":
                 payload["refresh_result"] = "own_success"
+            elif kind == "deferred":
+                payload["escalation_reason"] = "classification_cannot_finish_safely"
             return payload
 
         commit = event(
@@ -245,16 +246,40 @@ class RunValidityTests(unittest.TestCase):
         prefixes["truth"] = activate(
             prefixes["truth"], "truth", "FACT_ACTIVATED", 4, "fact-A", "A2"
         )
-        refreshed = event(
+        terminal = event(
             prefixes["work"],
             "project-work",
-            "COMPLETION_PROOF_REFRESHED",
-            recheck_payload(5, "refreshed"),
+            terminal_event_type,
+            recheck_payload(5, terminal_kind),
         )
-        prefixes["work"] += (refreshed,)
+        prefixes["work"] += (terminal,)
         cut = reduce_project_cut(as_prefixes(prefixes))
+        return self.slice_for(local, cut).state
+
+    def test_recheck_refresh_after_dependency_stale_yields_stale_slice(self):
+        # M-5: a legal COMPLETION_PROOF_REFRESHED after a mid-recheck dependency
+        # change must yield a STALE slice — staleness dominates the restore —
+        # rather than raising and leaving an uncomputable run certificate on a
+        # fully legal ledger (design 1070/1071/1276).
         self.assertEqual(
-            self.slice_for(local, cut).state, AnalysisState.STALE_CONTEXT
+            self._stale_recheck_terminal("refreshed", "COMPLETION_PROOF_REFRESHED"),
+            AnalysisState.STALE_CONTEXT,
+        )
+
+    def test_recheck_revoke_after_dependency_stale_yields_stale_slice(self):
+        # M-5 follow-up: COMPLETION_PROOF_REVOKED during dependency staleness is
+        # the same class — staleness dominates, the slice stays STALE, no raise.
+        self.assertEqual(
+            self._stale_recheck_terminal("revoked", "COMPLETION_PROOF_REVOKED"),
+            AnalysisState.STALE_CONTEXT,
+        )
+
+    def test_recheck_defer_after_dependency_stale_keeps_stale_slice(self):
+        # M-5 follow-up: COMPLETION_RECHECK_DEFERRED during dependency staleness
+        # likewise keeps the STALE slice instead of raising.
+        self.assertEqual(
+            self._stale_recheck_terminal("deferred", "COMPLETION_RECHECK_DEFERRED"),
+            AnalysisState.STALE_CONTEXT,
         )
 
     def test_all_five_genesis_anchors_are_required(self):

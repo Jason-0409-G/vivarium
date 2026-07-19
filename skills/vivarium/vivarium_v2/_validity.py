@@ -323,14 +323,28 @@ def reduce_run_validity(
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("recheck REVOKE has no matching blocker")
             blockers.remove(overlay.transaction_id)
-            transition = overlay_transition(overlay, guard)
-            set_effective_state(AnalysisState(transition.to_state))
+            # Dependency staleness observed during the recheck dominates: the run
+            # is already STALE (its correct end state under a revoke is stale too),
+            # so keep the STALE slice instead of transitioning from a STALE source
+            # that has no closed transition (design 1276; same class as REFRESH).
+            if active_attempt().analysis_state not in {
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }:
+                transition = overlay_transition(overlay, guard)
+                set_effective_state(AnalysisState(transition.to_state))
             operational_escalated = False
         elif overlay.event_type == "COMPLETION_RECHECK_DEFERRED":
             if overlay.transaction_id not in blockers:
                 raise IntegrityError("deferred recheck has no matching blocker")
-            transition = overlay_transition(overlay, guard)
-            set_effective_state(AnalysisState(transition.to_state))
+            if active_attempt().analysis_state not in {
+                AnalysisState.STALE_BRANCH,
+                AnalysisState.STALE_CONTEXT,
+                AnalysisState.STALE_COMPLETION,
+            }:
+                transition = overlay_transition(overlay, guard)
+                set_effective_state(AnalysisState(transition.to_state))
             operational_escalated = True
         elif overlay.event_type == "ROLLBACK_COMMITTED":
             if active_attempt().analysis_state != AnalysisState.COMMITTED:
