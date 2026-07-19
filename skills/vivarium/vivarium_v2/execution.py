@@ -437,17 +437,9 @@ def persist_execution_evidence_cut(store: Any, cut: ExecutionEvidenceCut) -> str
     return digest
 
 
-def require_success_completion(
-    store: Any,
-    execution_evidence_cut_digest: str,
-    *,
-    expected_run_id: str | None = None,
-) -> None:
-    """Fail closed unless a real durable ExecutionEvidenceCut classifies as
-    success. The commit path must derive success from a re-run of the frozen
-    classifier, never from a self-reported flag (design 12.6 / 7.4). When
-    expected_run_id is supplied, the cut must belong to that run so a genuine
-    success cut minted for another run cannot be borrowed to certify this one."""
+def _load_durable_execution_evidence_cut(
+    store: Any, execution_evidence_cut_digest: str
+) -> ExecutionEvidenceCut:
     path = (
         Path(store.root)
         / "artifacts"
@@ -467,6 +459,21 @@ def require_success_completion(
         raise IntegrityError("execution evidence cut is malformed") from exc
     if cut.execution_evidence_cut_digest != execution_evidence_cut_digest:
         raise IntegrityError("execution evidence cut digest does not match its object")
+    return cut
+
+
+def require_success_completion(
+    store: Any,
+    execution_evidence_cut_digest: str,
+    *,
+    expected_run_id: str | None = None,
+) -> None:
+    """Fail closed unless a real durable ExecutionEvidenceCut classifies as
+    success. The commit path must derive success from a re-run of the frozen
+    classifier, never from a self-reported flag (design 12.6 / 7.4). When
+    expected_run_id is supplied, the cut must belong to that run so a genuine
+    success cut minted for another run cannot be borrowed to certify this one."""
+    cut = _load_durable_execution_evidence_cut(store, execution_evidence_cut_digest)
     if expected_run_id is not None and cut.run_id != expected_run_id:
         raise IntegrityError("execution evidence cut belongs to a different run")
     if classify_completion(cut).outcome != "success":
@@ -571,6 +578,11 @@ def require_durable_completion_proof(
         raise IntegrityError("completion proof is not bound to the committed evidence cut")
     if proof.completion_claim_digest != expected_claim_digest:
         raise IntegrityError("completion proof binds a different completion claim")
+    cut = _load_durable_execution_evidence_cut(store, proof.execution_evidence_cut_digest)
+    if proof != build_completion_proof(classify_completion(cut), cut):
+        raise IntegrityError(
+            "completion proof body is not the one derived from its evidence cut"
+        )
 
 
 @dataclass(frozen=True)

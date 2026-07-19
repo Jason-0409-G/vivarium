@@ -216,6 +216,36 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request(**evidence))
 
+    def test_c1_commit_rejects_a_tampered_completion_proof_body(self):
+        # M-6 follow-up: the durable completion proof body must be the one
+        # honestly derived from the cut, not merely digest-self-consistent. A
+        # proof carrying the correct cut + claim but a forged success_grade is
+        # rejected, so the proof gate matches the evidence-bundle gate's rigor.
+        import dataclasses
+
+        from skills.vivarium.vivarium_v2.canonical import (
+            canonical_bytes,
+            durable_replace,
+        )
+        from skills.vivarium.vivarium_v2.execution import (
+            build_completion_proof,
+            classify_completion,
+        )
+
+        store = self._store("tampered-proof", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        cut = execution_evidence_cut(run_id="run-1")
+        honest = build_completion_proof(classify_completion(cut), cut)
+        tampered = dataclasses.replace(honest, success_grade="GARBAGE")
+        digest = tampered.completion_proof_digest
+        durable_replace(
+            store.root / "artifacts" / "completion-proofs" / f"{digest[7:]}.json",
+            canonical_bytes(tampered._canonical_body()),
+        )
+        evidence["completion_proof_digest"] = digest
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False
