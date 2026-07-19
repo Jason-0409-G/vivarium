@@ -36,6 +36,26 @@ class AbortAuthorityInvalidationTests(unittest.TestCase):
         self.assertEqual(after.checker_review_heads, ())
         self.assertEqual(after.quorum_decision_heads, ())
 
+    def test_completion_unknown_abort_invalidates_stale_authority_heads(self):
+        # re-verify SERIOUS-1: aborting to UNKNOWN_TERMINAL keeps the SAME
+        # attempt and can loop back COLLECTING -> VALIDATING -> ... -> COMMITTING.
+        # The stale validator/review/quorum heads must be invalidated too, else
+        # the original quorum drives a second commit with no fresh review.
+        store = prepared_fixture(self.root / "unknown-abort")
+        prepared = store._test_prepared_commit
+        before = self._local(store)
+        self.assertTrue(before.validator_report_heads)
+        self.assertTrue(before.checker_review_heads)
+        self.assertTrue(before.quorum_decision_heads)
+
+        store.abort_commit(prepared, "COMPLETION_UNKNOWN_FINALITY")
+
+        after = self._local(store)
+        self.assertEqual(after.analysis_state, AnalysisState.UNKNOWN_TERMINAL)
+        self.assertEqual(after.validator_report_heads, ())
+        self.assertEqual(after.checker_review_heads, ())
+        self.assertEqual(after.quorum_decision_heads, ())
+
     def test_validator_abort_invalidates_report_review_and_quorum_heads(self):
         store = prepared_fixture(self.root / "validator-abort")
         prepared = store._test_prepared_commit

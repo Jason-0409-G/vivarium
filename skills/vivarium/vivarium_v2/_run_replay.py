@@ -498,10 +498,16 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                     raise IntegrityError("completion abort lacks a durable latest-cut classification")
             preparations[preparation.commit_tx_id] = replace(preparation, active=False)
             set_active_state(target)
-            # Aborting back to VALIDATING/CHECK_PENDING invalidates the active
-            # attempt's stale authority heads so they cannot be replayed straight
-            # back to COMMITTING without a fresh review (design 6.1).
-            if target in {AnalysisState.VALIDATING, AnalysisState.CHECK_PENDING}:
+            # Aborting to a state that keeps the SAME attempt and can loop back
+            # to COMMITTING (VALIDATING, CHECK_PENDING, or UNKNOWN_TERMINAL, which
+            # re-enters COLLECTING->VALIDATING) invalidates the active attempt's
+            # stale authority heads so they cannot be replayed straight back to
+            # COMMITTING without a fresh review (design 6.1).
+            if target in {
+                AnalysisState.VALIDATING,
+                AnalysisState.CHECK_PENDING,
+                AnalysisState.UNKNOWN_TERMINAL,
+            }:
                 for stale in [
                     key
                     for key, value in checker_reviews.items()
@@ -514,7 +520,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
                     if value.attempt_id == active_attempt_id
                 ]:
                     del quorum_decisions[stale]
-                if target == AnalysisState.VALIDATING:
+                if target in {AnalysisState.VALIDATING, AnalysisState.UNKNOWN_TERMINAL}:
                     for stale in [
                         key
                         for key, value in validator_reports.items()
