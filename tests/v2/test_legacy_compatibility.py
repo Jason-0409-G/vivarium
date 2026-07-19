@@ -122,5 +122,40 @@ class LegacyCompatibilityTests(unittest.TestCase):
             )
 
 
+    def test_legacy_cli_fails_closed_on_a_corrupt_v2_marker(self):
+        # re-verify MINOR: a present-but-unreadable run_format.json must fail
+        # closed (refuse), not fail open.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            rundir = root / "vivarium_run_compare-genomes"
+            rundir.mkdir(parents=True)
+            (rundir / "run_format.json").write_text("{ not json", encoding="utf-8")
+            manifest = rundir / "run_manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "goal": "compare-genomes",
+                        "stages": [
+                            {"skill": "vivarium-prep", "action": "stats",
+                             "weight": "light", "status": "planned",
+                             "inputs": [], "outputs": [], "command": "",
+                             "version": "", "qc": ""}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            before = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            update = subprocess.run(
+                ["python3", str(SCRIPT), "update", "--manifest", str(manifest),
+                 "--stage", "1", "--status", "done"],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertNotEqual(update.returncode, 0)
+            self.assertEqual(
+                before, hashlib.sha256(manifest.read_bytes()).hexdigest()
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

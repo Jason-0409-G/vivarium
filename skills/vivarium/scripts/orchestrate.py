@@ -58,16 +58,20 @@ def die(msg):
 
 
 def _v2_marker_present(rundir):
-    """A V2 run carries run_format.json = vivarium.run/v2; the legacy CLI must
-    never modify it (design 15.3 / Phase 0)."""
-    marker = os.path.join(rundir, "run_format.json")
-    if not os.path.isfile(marker):
-        return False
-    try:
-        body = json.load(open(marker))
-    except (json.JSONDecodeError, OSError):
-        return False
-    return isinstance(body, dict) and str(body.get("format", "")).startswith("vivarium.run/v2")
+    """A V2 run carries run_format.json / run_spec.json = vivarium.run/v2; the
+    legacy CLI must never modify it (design 15.3 / Phase 0). A present but
+    unreadable marker fails closed."""
+    for marker_name in ("run_format.json", "run_spec.json"):
+        marker = os.path.join(rundir, marker_name)
+        if not os.path.isfile(marker):
+            continue
+        try:
+            body = json.load(open(marker))
+        except (json.JSONDecodeError, OSError):
+            return True  # a present but unreadable marker fails closed
+        if isinstance(body, dict) and str(body.get("format", "")).startswith("vivarium.run/v2"):
+            return True
+    return False
 
 
 def _print_stages(stages):
