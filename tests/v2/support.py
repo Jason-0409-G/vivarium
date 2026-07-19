@@ -48,11 +48,54 @@ def fixture_store_at_revision(root: Path, revision: int) -> ProjectStore:
     return store
 
 
+def _seal_commit_bundle(store, tx_id):
+    identity = {
+        "run_id": "run-1",
+        "stage_id": f"stage-{tx_id}",
+        "attempt_id": f"attempt-{tx_id}",
+        "execution_intent_id": f"execution-{tx_id}",
+    }
+    workspace = (
+        store.root
+        / "runs"
+        / "run-1"
+        / "attempts"
+        / identity["stage_id"]
+        / identity["attempt_id"]
+        / "workspace"
+    )
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "result.txt").write_bytes(b"result\n")
+    (workspace / "execution.log").write_bytes(b"complete\n")
+    relative = lambda path: path.relative_to(store.root).as_posix()
+    bundle = seal_evidence_bundle(
+        store,
+        **identity,
+        execution_evidence_cut_digest=domain_hash(
+            "vivarium-test-commit-cut/v1", {"tx": tx_id}
+        ),
+        payload_paths=(relative(workspace / "result.txt"),),
+        log_paths=(relative(workspace / "execution.log"),),
+        writer_closure_digest=persist_writer_closure(
+            store, {**identity, "writer_closed": True}
+        ),
+        capability_revocation_receipt_digest=persist_execution_authority_object(
+            store, "capability-revocation", {**identity, "revoked": True}
+        ),
+        authority_role="validator",
+    )
+    return bundle.evidence_bundle_digest
+
+
 def valid_prepared_commit(
     store: ProjectStore, *, run_id: str = "run-1", **overrides
 ) -> PreparedCommit:
     if not store.capture()[1]:
         store.register_run(run_id, analysis_state="COLLECTING")
+    if "evidence_bundle_digest" not in overrides:
+        overrides["evidence_bundle_digest"] = _seal_commit_bundle(
+            store, overrides.get("commit_tx_id", "commit-1")
+        )
     return store.prepare_commit(valid_commit_request(run_id, **overrides))
 
 

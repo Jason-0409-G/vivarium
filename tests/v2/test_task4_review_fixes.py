@@ -5,7 +5,13 @@ from pathlib import Path
 from skills.vivarium.vivarium_v2.errors import IntegrityError
 from skills.vivarium.vivarium_v2.events import ZERO_HASH
 from skills.vivarium.vivarium_v2.project import ProjectStore
-from tests.v2.support import FrozenClock, prepared_fixture, valid_commit_request, valid_prepared_commit
+from tests.v2.support import (
+    FrozenClock,
+    _seal_commit_bundle,
+    prepared_fixture,
+    valid_commit_request,
+    valid_prepared_commit,
+)
 
 
 class Task4FrozenReviewFixes(unittest.TestCase):
@@ -25,9 +31,21 @@ class Task4FrozenReviewFixes(unittest.TestCase):
 
     def test_c1_commit_rejects_synthesized_authority_defaults(self):
         store = self._store("authority", state="COMMITTING")
-        prepared = store.prepare_commit(valid_commit_request())
+        prepared = store.prepare_commit(
+            valid_commit_request(
+                evidence_bundle_digest=_seal_commit_bundle(store, "commit-1")
+            )
+        )
         with self.assertRaises(IntegrityError):
             store.complete_commit(prepared)
+
+    def test_c1_commit_rejects_a_fabricated_evidence_bundle(self):
+        # C-1 (increment 1): prepare must fail closed when evidence_bundle_digest
+        # points to no real sealed bundle — a fully forged commit request must
+        # not be able to synthesize its own authority chain.
+        store = self._store("forged-bundle")
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request())
 
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
@@ -39,9 +57,10 @@ class Task4FrozenReviewFixes(unittest.TestCase):
                 fired = True
                 raise RuntimeError("crash")
 
+        digest = _seal_commit_bundle(store, "commit-1")
         store.fault_injector = crash
         with self.assertRaises(RuntimeError):
-            store.prepare_commit(valid_commit_request())
+            store.prepare_commit(valid_commit_request(evidence_bundle_digest=digest))
         store.fault_injector = None
         roots = [store.recover().federated_state_root for _ in range(3)]
         self.assertEqual(len(set(roots)), 1)

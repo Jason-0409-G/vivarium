@@ -370,6 +370,32 @@ def validate_evidence_bundle(
     )
 
 
+def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> None:
+    """Fail closed unless a real sealed EvidenceBundle object exists at the
+    referenced digest. The commit path must never accept a fabricated bundle
+    digest that points to nothing (design 7.4)."""
+    if not _is_digest(evidence_bundle_digest):
+        raise IntegrityError("commit references an invalid evidence bundle digest")
+    path = (
+        Path(store.root)
+        / "artifacts"
+        / "evidence-bundles"
+        / f"{evidence_bundle_digest[7:]}.json"
+    )
+    try:
+        raw = path.read_bytes()
+        body = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise IntegrityError("commit references a non-durable evidence bundle") from exc
+    if (
+        not isinstance(body, dict)
+        or canonical_bytes(body) != raw
+        or domain_hash("vivarium-evidence-bundle/v1", body) != evidence_bundle_digest
+        or body.get("sealed_by_role") != "validator"
+    ):
+        raise IntegrityError("durable evidence bundle bytes do not match the referenced digest")
+
+
 def seal_validator_evidence(
     store: Any,
     bundle: EvidenceBundle,
@@ -413,6 +439,7 @@ __all__ = [
     "EvidenceFile",
     "ValidatorSeal",
     "persist_writer_closure",
+    "require_durable_evidence_bundle",
     "seal_evidence_bundle",
     "seal_validator_evidence",
     "validate_evidence_bundle",

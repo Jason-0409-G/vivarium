@@ -13,6 +13,7 @@ from ._project_support import _object_projection, empty_project_state_root
 from ._replay_common import ACTIVE_ROOT_DOMAIN, GENESIS_LEDGER_IDS, GENESIS_TYPES
 from .canonical import canonical_bytes, domain_hash, durable_replace
 from .errors import IntegrityError
+from .evidence import require_durable_evidence_bundle
 from .events import Event, ZERO_HASH
 from .ledger import Ledger
 from .reducers import federate, reduce_project_cut, reduce_project_validity, reduce_run, reduce_run_validity
@@ -592,6 +593,7 @@ class ProjectStore:
             or not prepared.budget_available
         ):
             raise IntegrityError("commit intent does not authorize a success preparation")
+        require_durable_evidence_bundle(self, prepared.evidence_bundle_digest)
         self._write_artifact(prepared)
         run_ledger = self._run_ledger(prepared.run_id)
 
