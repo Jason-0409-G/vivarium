@@ -27,6 +27,7 @@ from ._replay_common import (
     _dependency_projection,
     _obligation_value,
     _require_dict,
+    _require_digest,
     _require_string,
 )
 
@@ -231,7 +232,7 @@ def _parse_initial_obligations(payload: dict[str, Any]) -> dict[str, ObligationR
             _require_string(item, "obligation_id"),
             kind,
             _obligation_value(_require_string(item, "state"), "initial obligation state"),
-            _require_string(item, "head_digest"),
+            _require_digest(item, "head_digest"),
             _require_string(item, "side_effect_scope_key"),
             _require_string(item, "operation_key") if "operation_key" in item else None,
             (
@@ -260,7 +261,7 @@ def _parse_initial_clients(payload: dict[str, Any]) -> dict[str, MutationClientR
         record = MutationClientRecord(
             _require_string(item, "operation_key"),
             _client_value(_require_string(item, "state"), "initial client state"),
-            _require_string(item, "head_digest"),
+            _require_digest(item, "head_digest"),
             _require_string(item, "side_effect_scope_key"),
         )
         if record.operation_key in result:

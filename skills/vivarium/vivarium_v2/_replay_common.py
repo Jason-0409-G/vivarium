@@ -5,7 +5,7 @@ from typing import Any
 
 from .canonical import domain_hash
 from .errors import IntegrityError
-from .events import Event, ZERO_HASH
+from .events import Event, ZERO_HASH, _HASH_PATTERN
 from .state import AnalysisState, DependencyHead, ExternalClientState, ObligationState
 
 PROJECT_VALIDITY_DOMAIN = "vivarium-project-validity/v1"
@@ -67,7 +67,7 @@ def _require_string(payload: dict[str, Any], field: str) -> str:
 
 def _require_digest(payload: dict[str, Any], field: str) -> str:
     value = _require_string(payload, field)
-    if not value.startswith("sha256:") or len(value) != 71:
+    if _HASH_PATTERN.fullmatch(value) is None:
         raise IntegrityError(f"{field} must be a sha256 digest")
     return value
 

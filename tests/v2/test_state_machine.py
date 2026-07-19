@@ -346,6 +346,29 @@ class RunReducerTests(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             reduce_run(events)
 
+    def test_non_hex_obligation_head_digest_is_rejected(self):
+        # re-verify rework: the sibling validator _replay_common._require_digest
+        # (obligation/client head digests, semantic-cut baselines) must also be
+        # strict lowercase hex.
+        events = append_event(
+            (),
+            "RUN_LEDGER_GENESIS",
+            run_genesis_payload(
+                "SUBMISSION_UNCERTAIN",
+                obligations=[
+                    {
+                        "obligation_id": "submission:key-1",
+                        "obligation_kind": "submission",
+                        "state": "SUBMISSION_UNCERTAIN",
+                        "head_digest": "sha256:" + "z" * 64,
+                        "side_effect_scope_key": "scope-1",
+                    }
+                ],
+            ),
+        )
+        with self.assertRaises(IntegrityError):
+            reduce_run(events)
+
     def test_open_enum_value_is_reported_as_integrity_failure(self):
         events = self.prepared_run()
         invalid = append_event(

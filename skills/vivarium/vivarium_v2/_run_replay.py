@@ -11,6 +11,7 @@ from ._replay_common import (
     _dependency,
     _dependency_projection,
     _require_dict,
+    _require_digest,
     _require_int,
     _require_string,
     _verify_event_prefix,
@@ -121,7 +122,7 @@ def reduce_run(events: Sequence[Event]) -> RunLocalState:
             evidence[cut_id] = EvidenceCutHead(
                 cut_id,
                 active_attempt_id,
-                _require_string(payload, "head_digest"),
+                _require_digest(payload, "head_digest"),
                 item.event_id,
                 item.event_hash,
             )
