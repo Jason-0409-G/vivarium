@@ -594,8 +594,14 @@ class ProjectStore:
             or not prepared.budget_available
         ):
             raise IntegrityError("commit intent does not authorize a success preparation")
-        require_durable_evidence_bundle(self, prepared.evidence_bundle_digest)
-        require_success_completion(self, prepared.execution_evidence_cut_digest)
+        bundle = require_durable_evidence_bundle(self, prepared.evidence_bundle_digest)
+        if bundle.run_id != prepared.run_id:
+            raise IntegrityError("commit evidence bundle belongs to a different run")
+        require_success_completion(
+            self,
+            prepared.execution_evidence_cut_digest,
+            expected_run_id=prepared.run_id,
+        )
         self._write_artifact(prepared)
         run_ledger = self._run_ledger(prepared.run_id)
 

@@ -381,14 +381,14 @@ def _evidence_bundle_from_body(body: Mapping[str, Any]) -> EvidenceBundle:
     return EvidenceBundle(**fields)
 
 
-def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> None:
+def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> EvidenceBundle:
     """Fail closed unless a real, fully-valid validator-sealed EvidenceBundle
-    exists at the referenced digest. Round-tripping the canonical bytes is not
-    enough: the object must reconstruct into an EvidenceBundle (re-running its
-    invariants) and pass validate_evidence_bundle (content-addressed evidence
-    artifacts, writer closure, capability revocation must all exist). A canonical
-    but forged JSON blob that merely self-hashes and claims sealed_by_role must
-    not be accepted (design 7.4)."""
+    exists at the referenced digest, and return it. Round-tripping the canonical
+    bytes is not enough: the object must reconstruct into an EvidenceBundle
+    (re-running its invariants) and pass validate_evidence_bundle
+    (content-addressed evidence artifacts, writer closure, capability revocation
+    must all exist). A canonical but forged JSON blob that merely self-hashes and
+    claims sealed_by_role must not be accepted (design 7.4)."""
     if not _is_digest(evidence_bundle_digest):
         raise IntegrityError("commit references an invalid evidence bundle digest")
     path = (
@@ -411,6 +411,7 @@ def require_durable_evidence_bundle(store: Any, evidence_bundle_digest: str) -> 
     if bundle.evidence_bundle_digest != evidence_bundle_digest:
         raise IntegrityError("durable evidence bundle digest does not match its object")
     validate_evidence_bundle(store, bundle)
+    return bundle
 
 
 def seal_validator_evidence(

@@ -86,6 +86,28 @@ class Task4FrozenReviewFixes(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             store.prepare_commit(valid_commit_request(**evidence))
 
+    def test_c1_commit_rejects_a_foreign_run_success_cut(self):
+        # C-1 (increment 3a): the committed success cut must belong to the run
+        # being committed. A genuine success cut minted for a *different* run
+        # cannot be borrowed to certify this run's commit.
+        store = self._store("foreign-cut", state="COMMITTING")
+        evidence = _seal_commit_evidence(store, "commit-1")
+        evidence["execution_evidence_cut_digest"] = persist_execution_evidence_cut(
+            store, execution_evidence_cut(run_id="run-2")
+        )
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(**evidence))
+
+    def test_c1_commit_rejects_a_foreign_run_bundle(self):
+        # C-1 (increment 3a): the sealed evidence bundle must belong to the run
+        # being committed. A real bundle sealed for a *different* run cannot be
+        # borrowed to certify this run's commit.
+        store = self._store("foreign-bundle", state="COMMITTING")
+        store.register_run("run-2", analysis_state="COLLECTING")
+        foreign = _seal_commit_evidence(store, "commit-2", run_id="run-2")
+        with self.assertRaises(IntegrityError):
+            store.prepare_commit(valid_commit_request(run_id="run-1", **foreign))
+
     def test_i1_recovery_resumes_matching_intent_without_prepare(self):
         store = self._store("intent")
         fired = False

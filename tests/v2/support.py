@@ -49,9 +49,9 @@ def fixture_store_at_revision(root: Path, revision: int) -> ProjectStore:
     return store
 
 
-def _seal_commit_evidence(store, tx_id):
+def _seal_commit_evidence(store, tx_id, run_id="run-1"):
     identity = {
-        "run_id": "run-1",
+        "run_id": run_id,
         "stage_id": f"stage-{tx_id}",
         "attempt_id": f"attempt-{tx_id}",
         "execution_intent_id": f"execution-{tx_id}",
@@ -59,7 +59,7 @@ def _seal_commit_evidence(store, tx_id):
     workspace = (
         store.root
         / "runs"
-        / "run-1"
+        / run_id
         / "attempts"
         / identity["stage_id"]
         / identity["attempt_id"]
@@ -69,12 +69,13 @@ def _seal_commit_evidence(store, tx_id):
     (workspace / "result.txt").write_bytes(b"result\n")
     (workspace / "execution.log").write_bytes(b"complete\n")
     relative = lambda path: path.relative_to(store.root).as_posix()
+    cut_digest = persist_execution_evidence_cut(
+        store, execution_evidence_cut(run_id=run_id)
+    )
     bundle = seal_evidence_bundle(
         store,
         **identity,
-        execution_evidence_cut_digest=domain_hash(
-            "vivarium-test-commit-cut/v1", {"tx": tx_id}
-        ),
+        execution_evidence_cut_digest=cut_digest,
         payload_paths=(relative(workspace / "result.txt"),),
         log_paths=(relative(workspace / "execution.log"),),
         writer_closure_digest=persist_writer_closure(
@@ -87,9 +88,7 @@ def _seal_commit_evidence(store, tx_id):
     )
     return {
         "evidence_bundle_digest": bundle.evidence_bundle_digest,
-        "execution_evidence_cut_digest": persist_execution_evidence_cut(
-            store, execution_evidence_cut()
-        ),
+        "execution_evidence_cut_digest": cut_digest,
     }
 
 
@@ -99,7 +98,7 @@ def valid_prepared_commit(
     if not store.capture()[1]:
         store.register_run(run_id, analysis_state="COLLECTING")
     for key, value in _seal_commit_evidence(
-        store, overrides.get("commit_tx_id", "commit-1")
+        store, overrides.get("commit_tx_id", "commit-1"), run_id=run_id
     ).items():
         overrides.setdefault(key, value)
     return store.prepare_commit(valid_commit_request(run_id, **overrides))

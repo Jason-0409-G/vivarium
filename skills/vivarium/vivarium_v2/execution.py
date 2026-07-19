@@ -437,10 +437,17 @@ def persist_execution_evidence_cut(store: Any, cut: ExecutionEvidenceCut) -> str
     return digest
 
 
-def require_success_completion(store: Any, execution_evidence_cut_digest: str) -> None:
+def require_success_completion(
+    store: Any,
+    execution_evidence_cut_digest: str,
+    *,
+    expected_run_id: str | None = None,
+) -> None:
     """Fail closed unless a real durable ExecutionEvidenceCut classifies as
     success. The commit path must derive success from a re-run of the frozen
-    classifier, never from a self-reported flag (design 12.6 / 7.4)."""
+    classifier, never from a self-reported flag (design 12.6 / 7.4). When
+    expected_run_id is supplied, the cut must belong to that run so a genuine
+    success cut minted for another run cannot be borrowed to certify this one."""
     path = (
         Path(store.root)
         / "artifacts"
@@ -460,6 +467,8 @@ def require_success_completion(store: Any, execution_evidence_cut_digest: str) -
         raise IntegrityError("execution evidence cut is malformed") from exc
     if cut.execution_evidence_cut_digest != execution_evidence_cut_digest:
         raise IntegrityError("execution evidence cut digest does not match its object")
+    if expected_run_id is not None and cut.run_id != expected_run_id:
+        raise IntegrityError("execution evidence cut belongs to a different run")
     if classify_completion(cut).outcome != "success":
         raise IntegrityError("commit requires a re-classified success completion")
 
