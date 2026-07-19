@@ -623,6 +623,44 @@ class TemporalGraphAndClosureCounterexamples(unittest.TestCase):
         self.assertEqual(owner_slice.state, AnalysisState.COMPLETION_RECHECK_PENDING)
         self.assertEqual(child_slice.state, AnalysisState.PENDING_COMPLETION_DEPENDENCY)
 
+    def test_descendant_suspended_by_two_upstream_rechecks(self):
+        # Diamond: one child depends on two upstreams; each upstream opens its
+        # own first recheck (both legitimately own_stage). The child is
+        # suspended twice and must stay PENDING_COMPLETION_DEPENDENCY, not raise.
+        up1, up1_evidence, up1_prepare = prepared_local("up1")
+        up2, up2_evidence, up2_prepare = prepared_local("up2")
+        child, child_evidence, child_prepare = prepared_local("child")
+        values = project_genesis()
+        values["work"] = append(
+            values["work"], "project-work", "STAGE_COMMITTED",
+            commit_event_payload(1, "child", child_prepare, child_evidence, "stage-child", (
+                {"namespace": "work", "object_id": "stage-up1", "object_head": "stage-up1-head-2"},
+                {"namespace": "work", "object_id": "stage-up2", "object_head": "stage-up2-head-3"},
+            )),
+        )
+        values["work"] = append(
+            values["work"], "project-work", "STAGE_COMMITTED",
+            commit_event_payload(2, "up1", up1_prepare, up1_evidence, "stage-up1"),
+        )
+        values["work"] = append(
+            values["work"], "project-work", "STAGE_COMMITTED",
+            commit_event_payload(3, "up2", up2_prepare, up2_evidence, "stage-up2"),
+        )
+        values["work"] = append(
+            values["work"], "project-work", "COMPLETION_RECHECK_OPENED",
+            recheck_open_payload(4, "up1", up1_prepare, up1_evidence, "stage-up1"),
+        )
+        values["work"] = append(
+            values["work"], "project-work", "COMPLETION_RECHECK_OPENED",
+            recheck_open_payload(5, "up2", up2_prepare, up2_evidence, "stage-up2"),
+        )
+        cut = reduce_project_cut(prefixes(values))
+        validity = reduce_project_validity(cut)
+
+        child_slice = reduce_run_validity(cut, validity, child)
+
+        self.assertEqual(child_slice.state, AnalysisState.PENDING_COMPLETION_DEPENDENCY)
+
     def test_future_graph_edge_does_not_reinterpret_prior_recheck(self):
         owner, owner_evidence, owner_prepare = prepared_local("owner")
         child, child_evidence, child_prepare = prepared_local("child")
@@ -1152,6 +1190,42 @@ class ProjectTransitionExecutionHarness(unittest.TestCase):
                 observed,
                 relation=relation,
             )
+
+        # Diamond: a descendant already pending from one upstream is suspended
+        # again by a second, independent upstream (own_stage from each). Covers
+        # PENDING_COMPLETION_DEPENDENCY --downstream_dependency_suspended--> self.
+        up1, up1_evidence, up1_prepare = prepared_local("diamond-up1")
+        up2, up2_evidence, up2_prepare = prepared_local("diamond-up2")
+        child, child_evidence, child_prepare = prepared_local("diamond-child")
+        values = project_genesis()
+        self._append_and_execute(
+            values, child, AnalysisState.COMMITTING, "STAGE_COMMITTED",
+            commit_event_payload(1, "diamond-child", child_prepare, child_evidence, "stage-diamond-child", (
+                {"namespace": "work", "object_id": "stage-diamond-up1", "object_head": "stage-diamond-up1-head-2"},
+                {"namespace": "work", "object_id": "stage-diamond-up2", "object_head": "stage-diamond-up2-head-3"},
+            )),
+            observed,
+        )
+        self._append_and_execute(
+            values, child, AnalysisState.COMMITTED, "STAGE_COMMITTED",
+            commit_event_payload(2, "diamond-up1", up1_prepare, up1_evidence, "stage-diamond-up1"),
+            observed, relation="unrelated",
+        )
+        self._append_and_execute(
+            values, child, AnalysisState.COMMITTED, "STAGE_COMMITTED",
+            commit_event_payload(3, "diamond-up2", up2_prepare, up2_evidence, "stage-diamond-up2"),
+            observed, relation="unrelated",
+        )
+        pending = self._append_and_execute(
+            values, child, AnalysisState.COMMITTED, "COMPLETION_RECHECK_OPENED",
+            self._recheck_payload(4, "diamond-up1", up1_prepare, up1_evidence, "stage-diamond-up1", "diamond-tx-1", "COMPLETION_RECHECK_OPENED", "own_stage"),
+            observed, relation="descendant",
+        )
+        self._append_and_execute(
+            values, child, pending, "COMPLETION_RECHECK_OPENED",
+            self._recheck_payload(5, "diamond-up2", up2_prepare, up2_evidence, "stage-diamond-up2", "diamond-tx-2", "COMPLETION_RECHECK_OPENED", "own_stage"),
+            observed, relation="descendant",
+        )
 
         expected = {
             tuple(item) for item in ALL_TRANSITIONS if item.owner_ledger == "project"

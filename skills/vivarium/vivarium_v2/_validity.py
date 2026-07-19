@@ -288,7 +288,10 @@ def reduce_run_validity(
                 )
                 set_effective_state(AnalysisState(transition.to_state))
             else:
-                if guard != "additional_complete_cut_durable":
+                if guard not in {
+                    "additional_complete_cut_durable",
+                    "downstream_dependency_suspended",
+                }:
                     raise IntegrityError("additional recheck OPEN has the wrong typed scope")
                 transition = overlay_transition(overlay, guard)
                 set_effective_state(AnalysisState(transition.to_state))

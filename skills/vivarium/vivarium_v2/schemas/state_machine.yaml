@@ -223,6 +223,7 @@
     {"reducer":"analysis","from":"COMMITTED","event":"COMPLETION_RECHECK_OPENED","guard":"downstream_dependency_suspended","to":"PENDING_COMPLETION_DEPENDENCY","owner_ledger":"project"},
     {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_PROOF_REFRESHED","guard":"last_blocker_restore_COMMITTED","to":"COMMITTED","owner_ledger":"project"},
     {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_RECHECK_OPENED","guard":"additional_complete_cut_durable","to":"PENDING_COMPLETION_DEPENDENCY","owner_ledger":"project"},
+    {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_RECHECK_OPENED","guard":"downstream_dependency_suspended","to":"PENDING_COMPLETION_DEPENDENCY","owner_ledger":"project"},
     {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_PROOF_REFRESHED","guard":"refresh_blocker_removed_others_remain","to":"PENDING_COMPLETION_DEPENDENCY","owner_ledger":"project"},
     {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_RECHECK_DEFERRED","guard":"classification_cannot_finish_safely","to":"PENDING_COMPLETION_DEPENDENCY","owner_ledger":"project"},
     {"reducer":"analysis","from":"PENDING_COMPLETION_DEPENDENCY","event":"COMPLETION_PROOF_REVOKED","guard":"upstream_proof_revoked","to":"STALE_COMPLETION","owner_ledger":"project"},
