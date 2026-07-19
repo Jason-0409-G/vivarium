@@ -224,7 +224,7 @@ flowchart TD
 | 3 | Reducer stack 与 federated certificates | 核心底座 | 完成并推送 | 2 |
 | 4 | Project transactions/recovery/rollback/fork | 核心底座 | 完成并推送 | 2–3 |
 | 5 | Agent-only/local 受控执行 | 执行层 | 完成并推送 | 3–4 |
-| 6 | Immutable evidence 与 Maker/Checker 分离 | 证据/审查层 | 暂停；本地草稿未提交 | 4–5 |
+| 6 | Immutable evidence 与 Maker/Checker 分离 | 证据/审查层 | 已提交 `5d12e1c`；独立审计 + M-13/M-15 已修；M-14 与提交路径接入(C-1)待办 | 4–5 |
 | 7 | Facts/memory sealing/bounded handoff | 知识层 | 未开始 | 3–6 |
 | 8 | 生信合同与确定性 validators | 生信层 | 未开始 | 6–7 |
 | 9 | Cluster static profiles 与 fake scheduler | 集群 Phase A | 未开始 | 2–5 |
@@ -552,12 +552,13 @@ Checker 只收到：mission、rubric、acceptance contract、封存的 evidence 
 - `soft_isolation` 永远不能自动提交。
 - Gate 决策完全由 durable typed objects 重算，不能靠聊天上下文补充。
 
-### 12.7 当前状态：暂停，不计入完成
+### 12.7 当前状态：已提交并经独立审计与加固（implemented + audited）
 
-- 用户已明确要求当前先不做 Task 6；因此本任务保持暂停。
-- 本地存在未提交草稿：`evidence.py`、`roles.py`、三组测试和 `tests/v2/support.py` 修改。
-- 草稿的限定测试曾达到 12/12 PASS，compile/diff 检查通过；这只能说明草稿可运行，不能替代完整审查、全部回归和提交记录。
-- 在恢复 Task 6 前，不继续修改、审查、提交或推送这些草稿；文档也不把它标记为完成。
+- Task 6 的 `evidence.py`、`roles.py`、三组测试与 `tests/v2/support.py` 修改**已作为 commit `5d12e1c` 入库**（不再是未提交草稿）。
+- 已通过一轮 **52-agent 独立对抗审计**（`docs/superpowers/reviews/2026-07-19-vivarium-v2-tasks-1-6-independent-audit.md`）：no-follow 封存、Maker/Checker 隔离、quorum 门均由证伪测试覆盖；审计在 Task 6 模块发现 3 个 major——M-13（evidence bundle 未绑 provenance）、M-14（namespace attestation 可重算伪造）、M-15（封存器越界到整个 store root）。
+- 本轮已修 **M-13**（provenance 绑定进 bundle body，commit `5a4a27a`）与 **M-15**（封存范围限到 `runs/<run>/attempts/<stage>/<attempt>/` 子树，commit `120f7e4`），并经精简复验确认。**M-14** 属"当前缺真实 Orchestrator 签名基础设施"的架构性残留（同 C-1 一类），记录为已知项，待 orchestrator 接线时处理。
+- 全套测试 150/150 全绿。按 §27.3 词汇，Task 6 的封存/隔离模块为 `verified`（M-14 架构残留除外）。
+- ⚠️ 注意：Task 6 的 `decide_gate`/证据封存**尚未接入 Task 4 的提交路径**（见 C-1）；提交门当前仍自证，是全局最高优先级的待办。
 
 ---
 
@@ -1207,7 +1208,7 @@ flowchart LR
 14. Task 14 的 Claude Code/Codex 安装和发现均在临时根实测通过。
 15. 中英文 benchmark/README 的版本、数字、状态和限制一致。
 
-当前 **不满足** Definition of Done：Task 6 暂停，Task 7–14 待实施。因此现在可称为“V2 基础状态与执行监督层已完成到 Task 5”，不能称为“V2.0 已发布完成”。
+当前 **不满足** Definition of Done：Task 6 已提交并经独立审计/加固，但**提交门尚未接入独立验证（C-1）**，且 Task 7–14 待实施。因此现在可称为“V2 内核 + 证据/隔离模块已实现并审计到 Task 6，但提交路径尚未闭环”，不能称为“V2.0 已发布完成”。
 
 ---
 
@@ -1290,8 +1291,8 @@ Phase B 开始前必须获得至少一个真实站点的只读证据：scheduler
 |---|---|
 | Git branch | `codex/vivarium-loop-engineer-v2` |
 | V1 | 保留、默认兼容基线 |
-| V2 Task 1–5 | 已完成，最后已知完整 V2 回归为 125/125 |
-| V2 Task 6 | 暂停；存在未提交草稿，不计入完成 |
+| V2 Task 1–5 | 已提交；经 52-agent 独立审计发现并修复 4 个 critical(C-1 待办) + 多个 major；全套回归 150/150 |
+| V2 Task 6 | 已提交 `5d12e1c`；独立审计 + M-13/M-15 已修；M-14 与提交路径接入(C-1)待办 |
 | V2 Task 7–11 | 待实施 |
 | 正式 benchmark | 待 Task 11 后执行 |
 | V1 benchmark-driven optimization | 待 Task 12 baseline 后执行 |
@@ -1373,7 +1374,7 @@ Vivarium；Loop Engineer；bioinformatics workflow；comparative genomics；appe
 当前正确顺序是：
 
 1. 保持 Task 1–5 作为已验证基座。
-2. 按用户当前要求暂停 Task 6，不触碰其未提交草稿。
+2. Task 6 已提交（`5d12e1c`）并经独立审计与加固（M-13/M-15 已修，M-14 待架构接线）。
 3. 先完成并审查本 master document。
 4. 用户恢复开发后，从 Task 6 的现有草稿重新做完整测试和独立审查，不跳过 Task 6 直接写 Task 7。
 5. 完成 Task 7–10。
