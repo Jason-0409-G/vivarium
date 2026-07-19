@@ -118,6 +118,16 @@ class EvidenceSealingTests(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             validate_evidence_bundle(fixture["store"], bundle)
 
+    def test_sealer_rejects_paths_outside_the_attempt_workspace(self):
+        # M-15 (audit): the snapshotter was scoped to the whole project root, so
+        # it could seal another run's private data or a mutable projection. Only
+        # files under this attempt's workspace subtree may be sealed.
+        fixture = self._fixture("scope")
+        outside = fixture["store"].root / "sneak.txt"
+        outside.write_bytes(b"other-run-secret\n")
+        with self.assertRaises(IntegrityError):
+            self._seal(fixture, payload_paths=("sneak.txt",))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -221,15 +221,22 @@ def _secure_read(root: Path, relative_path: str) -> bytes:
 
 
 def _seal_files(
-    store: Any, relative_paths: Sequence[str]
+    store: Any, relative_paths: Sequence[str], allowed_prefix: str
 ) -> tuple[EvidenceFile, ...]:
     if isinstance(relative_paths, (str, bytes)):
         raise IntegrityError("evidence manifest inputs must be a path sequence")
+    prefix_parts = _relative_parts(allowed_prefix)
     normalized = tuple(relative_paths)
     if len(normalized) != len(set(normalized)):
         raise IntegrityError("evidence manifest paths must be unique")
     entries = []
     for relative_path in normalized:
+        parts = _relative_parts(relative_path)
+        if (
+            len(parts) <= len(prefix_parts)
+            or parts[: len(prefix_parts)] != prefix_parts
+        ):
+            raise IntegrityError("evidence path is outside the attempt workspace")
         body = _secure_read(Path(store.root), relative_path)
         content_digest = domain_hash(
             "vivarium-evidence-file/v1", base64.b64encode(body).decode("ascii")
@@ -286,6 +293,7 @@ def seal_evidence_bundle(
         "revoked"
     ) is not True:
         raise IntegrityError("capability revocation does not bind the sealed execution")
+    allowed_prefix = f"runs/{run_id}/attempts/{stage_id}/{attempt_id}"
     bundle = EvidenceBundle(
         EVIDENCE_BUNDLE_SCHEMA,
         run_id,
@@ -293,8 +301,8 @@ def seal_evidence_bundle(
         attempt_id,
         execution_intent_id,
         execution_evidence_cut_digest,
-        _seal_files(store, payload_paths),
-        _seal_files(store, log_paths),
+        _seal_files(store, payload_paths, allowed_prefix),
+        _seal_files(store, log_paths, allowed_prefix),
         writer_closure_digest,
         capability_revocation_receipt_digest,
         authority_role,
