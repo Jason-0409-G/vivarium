@@ -57,6 +57,19 @@ def die(msg):
     sys.exit(1)
 
 
+def _v2_marker_present(rundir):
+    """A V2 run carries run_format.json = vivarium.run/v2; the legacy CLI must
+    never modify it (design 15.3 / Phase 0)."""
+    marker = os.path.join(rundir, "run_format.json")
+    if not os.path.isfile(marker):
+        return False
+    try:
+        body = json.load(open(marker))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return isinstance(body, dict) and str(body.get("format", "")).startswith("vivarium.run/v2")
+
+
 def _print_stages(stages):
     print(f"\n{'#':>2}  {'sub-skill':<18} {'action':<12} {'weight':<9} status")
     for i, st in enumerate(stages, 1):
@@ -90,6 +103,8 @@ def cmd_init(a):
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     name = f"vivarium_run_{a.goal}" + (f"_{a.note}" if a.note else "")
     rundir = os.path.join(a.workdir, name)
+    if _v2_marker_present(rundir):
+        die(f"{rundir} is a V2 run (run_format.json=vivarium.run/v2); the legacy CLI must not modify it. Use `orchestrate.py v2 ...`.")
     os.makedirs(rundir, exist_ok=True)
     stages = [{
         "skill": s, "action": act, "weight": w, "status": "planned",
@@ -137,6 +152,8 @@ def cmd_update(a):
         m = json.load(open(a.manifest))
     except json.JSONDecodeError as e:
         die(f"manifest is not valid JSON: {e}")
+    if _v2_marker_present(os.path.dirname(os.path.abspath(a.manifest))):
+        die(f"{a.manifest} belongs to a V2 run; the legacy CLI must not modify it. Use `orchestrate.py v2 ...`.")
     i = a.stage - 1
     if i < 0 or i >= len(m["stages"]):
         die(f"--stage {a.stage} out of range (1..{len(m['stages'])})")
