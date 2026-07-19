@@ -1317,6 +1317,22 @@ class ProjectStore:
                         recheck_tx_id,
                     )
                 return existing
+            work_ledger_events = self._project_ledger("work").recover().events
+            opened_scope_txids = {
+                item.payload["recheck_tx_id"]
+                for item in work_ledger_events
+                if item.event_type == "COMPLETION_RECHECK_OPENED"
+                and item.payload.get("run_id") == run_id
+                and item.payload.get("target_object_id") == commit.payload["object_id"]
+            } - {
+                item.payload["recheck_tx_id"]
+                for item in work_ledger_events
+                if item.event_type
+                in ("COMPLETION_PROOF_REFRESHED", "COMPLETION_PROOF_REVOKED")
+                and item.payload.get("run_id") == run_id
+                and item.payload.get("target_object_id") == commit.payload["object_id"]
+            }
+            recheck_scope = "additional" if opened_scope_txids else "own_stage"
             cut = reduce_project_cut(self._prefixes())
             event = self._append(
                 self._project_ledger("work"),
@@ -1331,7 +1347,7 @@ class ProjectStore:
                     "run_event_id": inbox.event_id,
                     "run_event_hash": inbox.event_hash,
                     "recheck_tx_id": recheck_tx_id,
-                    "recheck_scope": "own_stage",
+                    "recheck_scope": recheck_scope,
                     "target_namespace": "work",
                     "target_object_id": commit.payload["object_id"],
                     "prepare_event_id": prepared.prepare_event_id,
