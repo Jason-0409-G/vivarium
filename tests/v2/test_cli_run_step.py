@@ -51,6 +51,27 @@ class CliRunStepTests(unittest.TestCase):
         proofs = list(logs.glob("*.completion-proof.json"))
         self.assertEqual(len(proofs), 1)
 
+    @unittest.skipUnless(GENOME.is_file(), "Shewanella genome fixture not present")
+    def test_commit_step_command_commits_a_real_stage(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = main(
+                [
+                    "commit-step",
+                    "--root",
+                    str(self.root / "store"),
+                    "--run-id",
+                    "run-1",
+                    "--genome",
+                    str(GENOME),
+                ]
+            )
+        self.assertEqual(code, 0)
+        work_ledgers = list((self.root / "store" / "ledgers").rglob("*work*.jsonl"))
+        committed = any(
+            "STAGE_COMMITTED" in path.read_text(encoding="utf-8") for path in work_ledgers
+        )
+        self.assertTrue(committed, "a STAGE_COMMITTED complete-cut must be in the ledger")
+
     def test_unknown_command_fails_closed(self):
         self.assertNotEqual(main([]), 0)
 
