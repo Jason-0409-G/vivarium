@@ -32,6 +32,19 @@ V2 = V1 那套可变 JSON `run_manifest.json` 的 **durable / 崩溃安全 / 事
 4. **`--check`/dry-run 预检**：脚本内验依赖后退 0/1 不做分析，让适配层区分「工具缺失（该 scaffold）」与「工具崩溃（真失败）」。全部脚本。
 5. **其余脚本 `--out` 相对校验**：适配层已挡（P1），脚本内也可加固。
 
+## 整套流程可端到端驱动（含重步骤 + 资源感知路由）
+
+在通用适配层之上，新增 `skills/vivarium/vivarium_v2/pipeline.py`，把"重活也做完整、整条流程怎么走"落地：
+
+- **富化 ACTIONS**：每个 (subskill, action) 现在自带 `expected_outputs`（workspace GLOB，`{flag}` 占位符从实参渲染）、`upstream`（声明依赖）、`resource`（{cores, ram_gb}）。所有重步骤填满：prokka / checkm2 / eggnog / dbcan / flye / OrthoFinder / dN-dS。`ingest_v1_step` 从表查产物（不再要调用方传），`ingest_outputs.py` 支持 GLOB。
+- **`plan_pipeline(goal|stages)`**：把 V1 的四个 goal（compare-genomes / phylogeny / selection / full）展开成有序 DAG，每步自带**确切命令、期望产物、依赖边、以及在本机的路由决策**。
+- **资源感知路由**（回答"根据设备判断本机跑还是上集群"）：
+  - `probe_device()`：核数、总内存、有没有集群调度器（sbatch/qsub/bsub）。
+  - `route_stage()` → `local_inline`（工具在 + 放得下本机 → loop 现在跑）| `cluster`（太重/缺工具但有调度器 → `cluster_script()` 生成可提交的 sbatch/qsub 作业）| `scaffold_local`（无调度器 → 用户外部跑 + ingest）。
+  - **诚实边界**：路由是资源感知启发式（保守挡住放不下的），不是精确耗时预测；**生成命令/集群脚本现在能做，全自动提交+轮询集群留给 Phase B 的真 scheduler adapter（内核已设计）**。
+- **可驱动 + 可恢复**：`drive_pipeline()` 自动跑 ready-local 段、在第一个待人工（scaffold/cluster）或阻塞处停下（并 register+建好 workspace 供用户丢产物）；`pipeline_status()` 报每步状态（committed / ready-local / pending-scaffold / pending-cluster / blocked）；用户 `ingest_scaffolded_stage()` 收回产物后再 `drive_pipeline()` 自动续跑。全程从持久 ledger 恢复、幂等不重跑。
+- **实测**：compare-genomes 计划在 prep:stats（seqkit 缺）暂停 → ingest → 续跑 compare:ani（真 FastANI）内联提交 → 在 aai 再暂停，status 一致。
+
 ## 判断
 - **核心配合问题（env 错配）已解决**——这是唯一致命、阻塞全部脚本的问题。
 - 剩余项是**加固/确定性**：确定性项在实际跑重工具做 durable 恢复时才显现，优先级次于 env；其余是可审计性/可发现性提升。
