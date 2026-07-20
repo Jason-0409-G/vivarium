@@ -30,6 +30,98 @@ LLM 驱动的比较基因组学分析有两处静默失效。其一，流程跑�
 
 > 持续更新不等于隐藏实验性边界。尚未完成的能力会在路线图和发布说明中明确标记；其中，集群作业自动提交与轮询仍属于后续版本范围。
 
+## 安装
+
+### Claude Code
+
+推荐通过插件市场安装，以便统一管理版本与更新。以下命令依次注册市场、安装插件并重新加载当前会话：
+
+**方式一 · 插件市场（推荐）**
+```
+/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
+/plugin install vivarium@vivarium
+/reload-plugins
+```
+> 使用完整 HTTPS 地址可避免安装过程依赖本机 SSH 凭据。
+
+如需审阅源码或固定本地副本，可克隆仓库后运行安装脚本：
+
+**方式二 · 脚本（本地安装）**
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh            # 将 skills/ 拷入 ~/.claude/skills/
+```
+
+### Codex
+
+Codex 可从用户级 `$HOME/.agents/skills` 或仓库级 `.agents/skills` 发现技能，并支持符号链接。安装本仓库时必须同时注册伞型技能及五个子技能。
+
+**方式一 · `$skill-installer`（推荐）**
+
+将以下请求粘贴到 Codex：
+
+```text
+Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
+skills/vivarium
+skills/vivarium-prep
+skills/vivarium-compare
+skills/vivarium-phylo
+skills/vivarium-search
+skills/vivarium-report
+```
+
+新安装的技能通常在下一轮任务中自动可用；若技能列表未刷新，请重启 Codex。
+
+**方式二 · 本地克隆并建立用户级符号链接**
+
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+mkdir -p "$HOME/.agents/skills"
+for skill in vivarium vivarium-prep vivarium-compare vivarium-phylo vivarium-search vivarium-report; do
+    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
+done
+```
+
+该方式保留单一源码副本，后续 `git pull` 即可使 Codex 读取更新后的技能内容。仅希望在当前仓库启用时，可将链接建立在仓库根目录的 `.agents/skills` 中。详见 [Codex 技能说明](https://learn.chatgpt.com/docs/build-skills)。
+
+## 更新
+
+发布版本由 `.claude-plugin/plugin.json` 中的 `version` 字段标识，并遵循语义化版本约定；版本变更记录以根目录 [`CHANGELOG.md`](CHANGELOG.md) 为准。
+
+### Claude Code
+
+插件市场安装需先刷新市场索引，再安装最新版本并重新加载会话：
+
+**插件市场安装**
+```
+/plugin marketplace update vivarium     # 拉取最新目录
+/plugin update vivarium@vivarium        # 安装新版本
+/reload-plugins                         # 本会话即时生效（或重启）
+```
+也可在 `/plugin` → Marketplaces 中为 `vivarium` 启用 **auto-update**。自动更新仍以市场索引和插件版本号为判定依据。
+
+本地脚本安装不会自动同步仓库；更新时需显式拉取代码并重新执行安装脚本：
+
+**脚本安装**
+```bash
+cd vivarium   # 先前克隆的目录
+git pull
+bash install.sh
+```
+
+### Codex
+
+采用本地克隆与符号链接安装时，链接目标保持不变，只需更新源码：
+
+```bash
+cd vivarium
+git pull
+```
+
+Codex 通常会自动检测技能文件变化；若当前会话仍显示旧版本，请重启 Codex。通过 `$skill-installer` 安装的独立副本应按照相同的六个技能路径重新同步；需要持续跟踪仓库更新时，建议使用本地克隆与符号链接方式。
+
 ## 为什么用 vivarium（而不是直接跑脚本）
 
 三条价值主张，各对应一类采用者，每条均由代码或基准支撑：
@@ -171,98 +263,6 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 ## 触发契约
 
 六个技能分别提供 `evals/trigger_evals.json`，合计包含 **67 条** should-trigger / should-not-trigger 查询（12 + 11 + 11 + 12 + 11 + 10）。这些文件定义技能的触发契约，并作为描述变更后的回归检查集；其结构遵循 `skill-creator` 的 eval-set schema。另以 20 条边界路由查询检验技能间的判别性，覆盖既有结果的再处理、完整流程与单步请求、相邻技能歧义以及不应触发任何技能的负样本。当前版本经人工复核的路由一致率为 **20/20**。该指标仅评价触发规则与预期路由的一致性，不评价下游分析的科学正确性。
-
-## 安装
-
-### Claude Code
-
-推荐通过插件市场安装，以便统一管理版本与更新。以下命令依次注册市场、安装插件并重新加载当前会话：
-
-**方式一 · 插件市场（推荐）**
-```
-/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
-/plugin install vivarium@vivarium
-/reload-plugins
-```
-> 使用完整 HTTPS 地址可避免安装过程依赖本机 SSH 凭据。
-
-如需审阅源码或固定本地副本，可克隆仓库后运行安装脚本：
-
-**方式二 · 脚本（本地安装）**
-```bash
-git clone https://github.com/Jason-0409-G/vivarium.git
-cd vivarium
-bash install.sh            # 将 skills/ 拷入 ~/.claude/skills/
-```
-
-### Codex
-
-Codex 可从用户级 `$HOME/.agents/skills` 或仓库级 `.agents/skills` 发现技能，并支持符号链接。安装本仓库时必须同时注册伞型技能及五个子技能。
-
-**方式一 · `$skill-installer`（推荐）**
-
-将以下请求粘贴到 Codex：
-
-```text
-Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
-skills/vivarium
-skills/vivarium-prep
-skills/vivarium-compare
-skills/vivarium-phylo
-skills/vivarium-search
-skills/vivarium-report
-```
-
-新安装的技能通常在下一轮任务中自动可用；若技能列表未刷新，请重启 Codex。
-
-**方式二 · 本地克隆并建立用户级符号链接**
-
-```bash
-git clone https://github.com/Jason-0409-G/vivarium.git
-cd vivarium
-mkdir -p "$HOME/.agents/skills"
-for skill in vivarium vivarium-prep vivarium-compare vivarium-phylo vivarium-search vivarium-report; do
-    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
-done
-```
-
-该方式保留单一源码副本，后续 `git pull` 即可使 Codex 读取更新后的技能内容。仅希望在当前仓库启用时，可将链接建立在仓库根目录的 `.agents/skills` 中。详见 [Codex 技能说明](https://learn.chatgpt.com/docs/build-skills)。
-
-## 更新
-
-发布版本由 `.claude-plugin/plugin.json` 中的 `version` 字段标识，并遵循语义化版本约定；版本变更记录以根目录 [`CHANGELOG.md`](CHANGELOG.md) 为准。
-
-### Claude Code
-
-插件市场安装需先刷新市场索引，再安装最新版本并重新加载会话：
-
-**插件市场安装**
-```
-/plugin marketplace update vivarium     # 拉取最新目录
-/plugin update vivarium@vivarium        # 安装新版本
-/reload-plugins                         # 本会话即时生效（或重启）
-```
-也可在 `/plugin` → Marketplaces 中为 `vivarium` 启用 **auto-update**。自动更新仍以市场索引和插件版本号为判定依据。
-
-本地脚本安装不会自动同步仓库；更新时需显式拉取代码并重新执行安装脚本：
-
-**脚本安装**
-```bash
-cd vivarium   # 先前克隆的目录
-git pull
-bash install.sh
-```
-
-### Codex
-
-采用本地克隆与符号链接安装时，链接目标保持不变，只需更新源码：
-
-```bash
-cd vivarium
-git pull
-```
-
-Codex 通常会自动检测技能文件变化；若当前会话仍显示旧版本，请重启 Codex。通过 `$skill-installer` 安装的独立副本应按照相同的六个技能路径重新同步；需要持续跟踪仓库更新时，建议使用本地克隆与符号链接方式。
 
 ## 依赖
 

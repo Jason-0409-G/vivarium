@@ -30,6 +30,98 @@ LLM-driven comparative-genomics analysis has two silent failure modes. First, a 
 
 > Continuous development does not conceal experimental boundaries. Incomplete capabilities are explicitly marked in the roadmap and release notes; automated cluster-job submission and polling remain in scope for a later version.
 
+## Installation
+
+### Claude Code
+
+Installation through the plugin marketplace is recommended because it centralizes version and update management. The following commands register the marketplace, install the plugin, and reload the active session:
+
+**Option 1 · Plugin marketplace (recommended)**
+```
+/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
+/plugin install vivarium@vivarium
+/reload-plugins
+```
+> Use the complete HTTPS address so that installation does not depend on local SSH credentials.
+
+For source inspection or a pinned local checkout, clone the repository and run the installation script:
+
+**Option 2 · Script (local installation)**
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh            # copies skills/ into ~/.claude/skills/
+```
+
+### Codex
+
+Codex discovers skills from the user-level `$HOME/.agents/skills` directory and repository-level `.agents/skills` directories, and it follows symlinked skill folders. A complete vivarium installation must register the umbrella skill and all five sub-skills.
+
+**Option 1 · `$skill-installer` (recommended)**
+
+Paste the following request into Codex:
+
+```text
+Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
+skills/vivarium
+skills/vivarium-prep
+skills/vivarium-compare
+skills/vivarium-phylo
+skills/vivarium-search
+skills/vivarium-report
+```
+
+Newly installed skills are normally available on the next task. Restart Codex if the skill list does not refresh.
+
+**Option 2 · Local clone with user-level symlinks**
+
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+mkdir -p "$HOME/.agents/skills"
+for skill in vivarium vivarium-prep vivarium-compare vivarium-phylo vivarium-search vivarium-report; do
+    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
+done
+```
+
+This method retains a single source checkout, so a subsequent `git pull` exposes updated skill content to Codex without copying files again. To scope the installation to one repository, create the links under that repository's `.agents/skills` directory instead. See the [Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
+
+## Updating
+
+Release identity is defined by the `version` field in `.claude-plugin/plugin.json` and follows semantic-versioning conventions; the root [`CHANGELOG.md`](CHANGELOG.md) is the authoritative record of version-specific changes.
+
+### Claude Code
+
+Marketplace installations should refresh the catalog before installing the latest release and reloading the session:
+
+**Marketplace install**
+```
+/plugin marketplace update vivarium     # pull the latest catalog
+/plugin update vivarium@vivarium        # install the new version
+/reload-plugins                         # take effect immediately in this session (or restart)
+```
+You may also enable **auto-update** for `vivarium` under `/plugin` → Marketplaces. Update detection remains governed by the marketplace catalog and plugin version.
+
+A script-based installation does not synchronize the repository automatically. Update the checkout explicitly and rerun the installer:
+
+**Script installation**
+```bash
+cd vivarium   # the previously cloned directory
+git pull
+bash install.sh
+```
+
+### Codex
+
+For a local clone with symlinked skills, the link targets remain stable; update the source checkout directly:
+
+```bash
+cd vivarium
+git pull
+```
+
+Codex normally detects changed skill files automatically. Restart Codex if the active session continues to expose the previous version. Independent copies installed through `$skill-installer` should be synchronized again from the same six repository paths; for continuous repository tracking, prefer the local-clone-and-symlink method.
+
 ## Why use vivarium (rather than just running scripts)
 
 Three value propositions, each addressing one class of adopter, each backed by code or benchmark:
@@ -171,98 +263,6 @@ To evaluate the central 2.0 mechanism—the event ledger as the authoritative ca
 ## Trigger contract
 
 Each of the six skills provides an `evals/trigger_evals.json` file, together comprising **67** should-trigger and should-not-trigger queries (12 + 11 + 11 + 12 + 11 + 10). These files define the trigger contract and serve as regression fixtures after description changes; their structure follows the `skill-creator` eval-set schema. An additional set of 20 boundary-routing queries assessed discrimination among neighboring skills, covering reprocessing of existing results, whole-pipeline versus single-step requests, ambiguous adjacent-skill cases, and negative inputs that should activate no skill. Manual review of the current version yielded **20/20** agreement with the expected route. This measure evaluates trigger-rule consistency only; it does not assess the scientific correctness of downstream analyses.
-
-## Installation
-
-### Claude Code
-
-Installation through the plugin marketplace is recommended because it centralizes version and update management. The following commands register the marketplace, install the plugin, and reload the active session:
-
-**Option 1 · Plugin marketplace (recommended)**
-```
-/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
-/plugin install vivarium@vivarium
-/reload-plugins
-```
-> Use the complete HTTPS address so that installation does not depend on local SSH credentials.
-
-For source inspection or a pinned local checkout, clone the repository and run the installation script:
-
-**Option 2 · Script (local installation)**
-```bash
-git clone https://github.com/Jason-0409-G/vivarium.git
-cd vivarium
-bash install.sh            # copies skills/ into ~/.claude/skills/
-```
-
-### Codex
-
-Codex discovers skills from the user-level `$HOME/.agents/skills` directory and repository-level `.agents/skills` directories, and it follows symlinked skill folders. A complete vivarium installation must register the umbrella skill and all five sub-skills.
-
-**Option 1 · `$skill-installer` (recommended)**
-
-Paste the following request into Codex:
-
-```text
-Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
-skills/vivarium
-skills/vivarium-prep
-skills/vivarium-compare
-skills/vivarium-phylo
-skills/vivarium-search
-skills/vivarium-report
-```
-
-Newly installed skills are normally available on the next task. Restart Codex if the skill list does not refresh.
-
-**Option 2 · Local clone with user-level symlinks**
-
-```bash
-git clone https://github.com/Jason-0409-G/vivarium.git
-cd vivarium
-mkdir -p "$HOME/.agents/skills"
-for skill in vivarium vivarium-prep vivarium-compare vivarium-phylo vivarium-search vivarium-report; do
-    ln -s "$PWD/skills/$skill" "$HOME/.agents/skills/$skill"
-done
-```
-
-This method retains a single source checkout, so a subsequent `git pull` exposes updated skill content to Codex without copying files again. To scope the installation to one repository, create the links under that repository's `.agents/skills` directory instead. See the [Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
-
-## Updating
-
-Release identity is defined by the `version` field in `.claude-plugin/plugin.json` and follows semantic-versioning conventions; the root [`CHANGELOG.md`](CHANGELOG.md) is the authoritative record of version-specific changes.
-
-### Claude Code
-
-Marketplace installations should refresh the catalog before installing the latest release and reloading the session:
-
-**Marketplace install**
-```
-/plugin marketplace update vivarium     # pull the latest catalog
-/plugin update vivarium@vivarium        # install the new version
-/reload-plugins                         # take effect immediately in this session (or restart)
-```
-You may also enable **auto-update** for `vivarium` under `/plugin` → Marketplaces. Update detection remains governed by the marketplace catalog and plugin version.
-
-A script-based installation does not synchronize the repository automatically. Update the checkout explicitly and rerun the installer:
-
-**Script installation**
-```bash
-cd vivarium   # the previously cloned directory
-git pull
-bash install.sh
-```
-
-### Codex
-
-For a local clone with symlinked skills, the link targets remain stable; update the source checkout directly:
-
-```bash
-cd vivarium
-git pull
-```
-
-Codex normally detects changed skill files automatically. Restart Codex if the active session continues to expose the previous version. Independent copies installed through `$skill-installer` should be synchronized again from the same six repository paths; for continuous repository tracking, prefer the local-clone-and-symlink method.
 
 ## Dependencies
 
