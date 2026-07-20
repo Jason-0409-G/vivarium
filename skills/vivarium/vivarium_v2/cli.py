@@ -110,9 +110,65 @@ def _stage_parser(prog: str) -> argparse.ArgumentParser:
     return parser
 
 
+def _pipeline_parser(prog: str) -> argparse.ArgumentParser:
+    from .pipeline import GOALS
+
+    parser = argparse.ArgumentParser(prog=prog, add_help=True)
+    parser.add_argument("--root", required=True, help="project store directory")
+    parser.add_argument("--goal", required=True, choices=sorted(GOALS))
+    parser.add_argument("--genomes", required=True, help="directory of .fna genomes")
+    return parser
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    from .pipeline import pipeline_defaults, plan_pipeline, probe_device
+
+    store = _open_store(Path(args.root).resolve())
+    genomes = str(Path(args.genomes).resolve())
+    device = probe_device()
+    plan = plan_pipeline(
+        goal=args.goal, params=pipeline_defaults(args.goal, genomes), store=store
+    )
+    sys.stdout.write(
+        f"device: {device['cores']} cores, {device['ram_gb']} GB RAM, "
+        f"scheduler={device['scheduler'] or 'none'}\n\n"
+    )
+    for stage in plan:
+        deps = ", ".join(stage.depends_on) or "-"
+        sys.stdout.write(
+            f"[{stage.route:14s}] {stage.run_id}  (deps: {deps})\n"
+            f"    $ {stage.command}\n"
+            f"    -> {list(stage.expected_outputs)}\n"
+        )
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    from .pipeline import drive_pipeline, pipeline_defaults, plan_pipeline
+
+    store = _open_store(Path(args.root).resolve())
+    genomes = str(Path(args.genomes).resolve())
+    plan = plan_pipeline(
+        goal=args.goal, params=pipeline_defaults(args.goal, genomes), store=store
+    )
+    for record in drive_pipeline(store, plan):
+        sys.stdout.write(f"{record['state']:16s} {record['run_id']}\n")
+        if str(record["state"]).startswith("pending"):
+            sys.stdout.write(
+                f"  run this yourself, then drop outputs into\n    {record['workspace']}\n"
+                f"  command: {record['command']}\n"
+                f"  expected outputs: {record['expected_outputs']}\n"
+                f"  then re-run to continue.\n"
+            )
+    return 0
+
+
+# command -> (handler, parser factory)
 _COMMANDS = {
-    "run-step": _cmd_run_step,
-    "commit-step": _cmd_commit_step,
+    "run-step": (_cmd_run_step, _stage_parser),
+    "commit-step": (_cmd_commit_step, _stage_parser),
+    "plan": (_cmd_plan, _pipeline_parser),
+    "run": (_cmd_run, _pipeline_parser),
 }
 
 
@@ -122,10 +178,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args:
             raise VivariumError("V2 command required")
         command, rest = args[0], args[1:]
-        handler = _COMMANDS.get(command)
-        if handler is None:
+        entry = _COMMANDS.get(command)
+        if entry is None:
             raise VivariumError(f"unknown V2 command: {command}")
-        return handler(_stage_parser(f"vivarium v2 {command}").parse_args(rest))
+        handler, parser_factory = entry
+        return handler(parser_factory(f"vivarium v2 {command}").parse_args(rest))
     except VivariumError as error:
         sys.stderr.write(f"ERROR: {error}\n")
         return error.exit_code

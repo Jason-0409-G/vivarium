@@ -53,6 +53,23 @@ GOALS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def pipeline_defaults(goal: str, genomes_dir: str) -> dict:
+    """Reasonable default flags per (subskill, action) for a goal over a genome
+    directory. Scaffold stages that need custom inputs (annotate per genome,
+    synteny pairs) still take a sensible default; the caller may override."""
+    g = str(genomes_dir)
+    return {
+        ("prep", "stats"): {"--indir": g, "--out": "genome_stats.tsv"},
+        ("prep", "annotate"): {"--indir": g, "--out": "annot"},
+        ("compare", "ani"): {"--indir": g, "--out": "ani_matrix.tsv"},
+        ("compare", "aai"): {"--indir": g, "--out": "aai_matrix.tsv"},
+        ("compare", "synteny"): {"--indir": g, "--out": "synteny.tsv"},
+        ("compare", "orthology"): {"--indir": "annot"},
+        ("phylo", "tree"): {"--input": "single_copy_core.faa", "--out": "tree"},
+        ("report", "heatmap"): {"--input": "ani_matrix.tsv", "--out": "fig_ani"},
+    }
+
+
 def _total_ram_gb() -> float:
     try:
         pages = os.sysconf("SC_PHYS_PAGES")
@@ -244,6 +261,26 @@ def pipeline_status(store, plan: Sequence[PlannedStage]) -> list[dict]:
     return report
 
 
+_INPUT_FLAGS = ("--input", "--list", "--matrix", "--aln", "--tree", "--cds")
+
+
+def _resolve_stage_inputs(store, stage: PlannedStage, plan: Sequence[PlannedStage]) -> dict:
+    """Wire inter-stage data flow: an input flag naming an upstream stage's output
+    is rewritten to that upstream stage's committed workspace path, so a downstream
+    stage reads its predecessor's sealed output."""
+    flags = dict(stage.flags)
+    by_run = {s.run_id: s for s in plan}
+    for dep_run_id in stage.depends_on:
+        upstream = by_run.get(dep_run_id)
+        if upstream is None:
+            continue
+        dep_ws = v1_stage_workspace(store, dep_run_id)
+        for key, value in list(flags.items()):
+            if key in _INPUT_FLAGS and str(value) in upstream.expected_outputs:
+                flags[key] = str(dep_ws / str(value))
+    return flags
+
+
 def drive_pipeline(store, plan: Sequence[PlannedStage]) -> list[dict]:
     """Run every ready local stage in order, committing each into the ledger, and
     stop at the first stage that must be done by the user (scaffold/cluster) or that
@@ -289,7 +326,7 @@ def drive_pipeline(store, plan: Sequence[PlannedStage]) -> list[dict]:
             run_id=stage.run_id,
             subskill=stage.subskill,
             action=stage.action,
-            flags=stage.flags,
+            flags=_resolve_stage_inputs(store, stage, plan),
             dependencies=dependencies,
         )
         if not step.committed:
@@ -330,6 +367,7 @@ __all__ = [
     "route_stage",
     "cluster_script",
     "plan_pipeline",
+    "pipeline_defaults",
     "pipeline_status",
     "drive_pipeline",
     "ingest_scaffolded_stage",
