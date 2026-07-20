@@ -198,22 +198,22 @@
       </div>
       <div class="metric-grid">
         <article class="metric-card reveal"><span data-zh="断言通过率" data-en="Assertion pass rate">断言通过率</span><strong>100%</strong><small data-zh="无 skill 基线：82%" data-en="No-skill baseline: 82%">无 skill 基线：82%</small></article>
-        <article class="metric-card reveal"><span data-zh="平均墙钟时间" data-en="Mean wall-clock time">平均墙钟时间</span><strong>72 s</strong><small data-zh="无 skill 基线：97 s" data-en="No-skill baseline: 97 s">无 skill 基线：97 s</small></article>
+        <article class="metric-card reveal"><span data-zh="平均耗时" data-en="Mean runtime">平均耗时</span><strong>72 s</strong><small data-zh="无 skill 基线：97 s" data-en="No-skill baseline: 97 s">无 skill 基线：97 s</small></article>
         <article class="metric-card reveal"><span data-zh="规模化召回保真度" data-en="Recall fidelity at scale">规模化召回保真度</span><strong>100%</strong><small data-zh="自管理上下文：8%" data-en="Self-managed context: 8%">自管理上下文：8%</small></article>
         <article class="metric-card reveal"><span data-zh="触发边界一致" data-en="Routing agreement">触发边界一致</span><strong>20/20</strong><small data-zh="相邻技能人工复核" data-en="Manual adjacent-skill review">相邻技能人工复核</small></article>
       </div>
       <div class="benchmark-figures">
         <figure class="benchmark-figure reveal">
           <div class="benchmark-comparison" aria-label="Version 1.0 benchmark summary">
-            <div><strong>100%</strong><span class="result-bar" style="--bar: 100%"></span><small>vivarium</small></div>
-            <div><strong>82%</strong><span class="result-bar baseline" style="--bar: 82%"></span><small>baseline</small></div>
+            <div class="cmp-row"><span class="cmp-name">vivarium</span><span class="cmp-track"><span class="result-bar" style="--bar: 100%"></span></span><strong class="cmp-value">100%</strong></div>
+            <div class="cmp-row"><span class="cmp-name">baseline</span><span class="cmp-track"><span class="result-bar baseline" style="--bar: 82%"></span></span><strong class="cmp-value">82%</strong></div>
           </div>
           <figcaption><strong data-zh="1.0 单任务基准" data-en="Version 1.0 single-task benchmark">1.0 单任务基准</strong><span data-zh="四类分析任务的断言通过率；当前记录为 100%，无 skill 基线为 82%。" data-en="Assertion pass rate across four analysis tasks: 100% in the recorded vivarium runs and 82% in the no-skill baseline.">四类分析任务的断言通过率；当前记录为 100%，无 skill 基线为 82%。</span><a href="./figures/benchmark_v1_chart.svg" target="_blank" rel="noreferrer" data-zh="查看完整评测图 ↗" data-en="Open the complete benchmark figure ↗">查看完整评测图 ↗</a></figcaption>
         </figure>
         <figure class="benchmark-figure reveal">
           <div class="benchmark-comparison" aria-label="Recall fidelity at scale">
-            <div><strong>100%</strong><span class="result-bar" style="--bar: 100%"></span><small data-zh="持久日志" data-en="durable log">持久日志</small></div>
-            <div><strong>8%</strong><span class="result-bar baseline" style="--bar: 8%"></span><small data-zh="自管理" data-en="self-managed">自管理</small></div>
+            <div class="cmp-row"><span class="cmp-name" data-zh="持久日志" data-en="durable log">持久日志</span><span class="cmp-track"><span class="result-bar" style="--bar: 100%"></span></span><strong class="cmp-value">100%</strong></div>
+            <div class="cmp-row"><span class="cmp-name" data-zh="自管理" data-en="self-managed">自管理</span><span class="cmp-track"><span class="result-bar baseline" style="--bar: 8%"></span></span><strong class="cmp-value">8%</strong></div>
           </div>
           <figcaption><strong data-zh="2.0 规模化记忆保真" data-en="Version 2.0 memory fidelity at scale">2.0 规模化记忆保真</strong><span data-zh="当项目累积状态超出可携带上下文时，最强模型自管理复述最早事实为 8%，从持久事件日志读回为 100%。" data-en="When accumulated project state exceeds carryable context, the strongest model self-managing recall of the earliest facts reaches 8%, while read-back from the durable event log is 100%.">当项目累积状态超出可携带上下文时，最强模型自管理复述最早事实为 8%，从持久事件日志读回为 100%。</span><a href="#thesis" data-zh="查看交互对照图 ↗" data-en="See the interactive chart ↗">查看交互对照图 ↗</a></figcaption>
         </figure>
@@ -231,8 +231,10 @@
         <p data-zh="下面的机制图展示 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 如何组成一个可恢复闭环。" data-en="The mechanism map shows how PLAN, ROUTE, EXECUTE, VALIDATE, C-1 GATE, SEAL, and RECOVER form a recoverable loop.">下面的机制图展示 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 如何组成一个可恢复闭环。</p>
       </div>
       <figure class="mechanism-image reveal">
-        <img src="./media/vivarium-mechanism-clean.png" width="1672" height="941" loading="lazy" alt="Text-free Vivarium workflow mechanism illustration" data-alt-zh="无内嵌文字的 vivarium 分析、校验与恢复机制图" data-alt-en="Text-free Vivarium workflow mechanism illustration">
-        <figcaption><strong data-zh="Vivarium 2.0 机制概览" data-en="Vivarium 2.0 mechanism overview">Vivarium 2.0 机制概览</strong><span data-zh="基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。" data-en="Genome inputs pass through planning, routing, real-tool execution, and a four-evidence commit gate before being sealed as verifiable events; recovery is driven by the verified record.">基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。</span><a href="./media/vivarium-v2-durable-loop-4k.png" target="_blank" rel="noreferrer" data-zh="查看带技术标签的 4K 详图 ↗" data-en="Open the labeled 4K technical map ↗">查看带技术标签的 4K 详图 ↗</a></figcaption>
+        <a class="mechanism-figure-link" href="./media/vivarium-v2-durable-loop-4k.png" target="_blank" rel="noreferrer" aria-label="Open the full-resolution mechanism map">
+          <img src="./media/vivarium-v2-durable-loop-4k.png" width="3840" height="2160" loading="lazy" alt="Vivarium 2.0 event-sourced, crash-safe, evidence-gated mechanism map with technical labels" data-alt-zh="vivarium 2.0 事件溯源、崩溃安全与证据闸门机制图（含技术标签）" data-alt-en="Vivarium 2.0 event-sourced, crash-safe, evidence-gated mechanism map with technical labels">
+        </a>
+        <figcaption><strong data-zh="Vivarium 2.0 机制概览" data-en="Vivarium 2.0 mechanism overview">Vivarium 2.0 机制概览</strong><span data-zh="基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。图中标注 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 各阶段。" data-en="Genome inputs pass through planning, routing, real-tool execution, and a four-evidence commit gate before being sealed as verifiable events; recovery is driven by the verified record. The map labels the PLAN, ROUTE, EXECUTE, VALIDATE, C-1 GATE, SEAL, and RECOVER stages.">基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。图中标注 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 各阶段。</span></figcaption>
       </figure>
       <details class="technical-details reveal">
         <summary data-zh="展开内部协议与实现边界" data-en="Open internal protocol and implementation boundaries">展开内部协议与实现边界</summary>
@@ -424,6 +426,25 @@ bash install.sh --target all      # all five clients</code></pre></div>
         <a class="status-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/docs/V1_V2_INTEGRATION.zh-CN.md" target="_blank" rel="noreferrer"><span>03</span><h3 data-zh="1.0 → 2.0" data-en="1.0 → 2.0">1.0 → 2.0</h3><p data-zh="分析脚本与持久化内核的关系" data-en="Relationship between analysis scripts and the durable kernel">分析脚本与持久化内核的关系</p></a>
       </div>
       <div class="boundary-callout reveal"><strong data-zh="当前边界" data-en="Current boundary">当前边界</strong><p data-zh="集群作业脚本生成已实现；自动提交和轮询尚未实现。vivarium 不自动安装软件或数据库，也不修改用户分析环境。" data-en="Cluster-job script generation is implemented; automatic submission and polling are not. vivarium does not install software or databases automatically or modify the user's analytical environment.">集群作业脚本生成已实现；自动提交和轮询尚未实现。vivarium 不自动安装软件或数据库，也不修改用户分析环境。</p></div>
+    </section>
+
+    <section class="section contact-section" id="contact">
+      <div class="contact-grid">
+        <div class="reveal">
+          <span class="section-kicker" data-zh="联系与共建" data-en="Contact &amp; contribute">联系与共建</span>
+          <h2 data-zh="欢迎生信同行使用，并一起把这套 loop workflow 做得更好" data-en="Welcome to use it — and to help make this loop workflow better">欢迎生信同行使用，并一起把这套 loop workflow 做得更好</h2>
+          <p data-zh="欢迎从事生物信息学分析的老师与同行使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。" data-en="Bioinformatics researchers and practitioners are warmly welcome to use this loop workflow. If you have ideas, or find anything to correct or improve, please reach out — and you are cordially invited to join as a co-contributor and help develop the project together.">欢迎从事生物信息学分析的老师与同行使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。</p>
+          <a class="button primary contact-mail-cta" href="mailto:jiangao202407@163.com?subject=vivarium%20loop%20workflow"><span aria-hidden="true">✉</span><span data-zh="一键发邮件给作者" data-en="Email the author in one click">一键发邮件给作者</span></a>
+          <div class="contact-methods">
+            <a class="contact-item" href="mailto:jiangao202407@163.com"><span class="contact-icon" aria-hidden="true">✉</span><span class="contact-text"><small data-zh="邮箱" data-en="Email">邮箱</small><strong>jiangao202407@163.com</strong></span></a>
+            <a class="contact-item" href="https://github.com/Jason-0409-G/vivarium" target="_blank" rel="noreferrer"><span class="contact-icon" aria-hidden="true">◆</span><span class="contact-text"><small data-zh="参与开发" data-en="Contribute">参与开发</small><strong>GitHub · Issues / Pull Request</strong></span></a>
+          </div>
+        </div>
+        <figure class="contact-qr reveal">
+          <img src="./media/wechat-qr.png" width="1412" height="1446" loading="lazy" alt="WeChat QR code" data-alt-zh="作者微信二维码" data-alt-en="Author's WeChat QR code">
+          <figcaption data-zh="微信扫码联系" data-en="Scan to connect on WeChat">微信扫码联系</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section class="final-cta">
