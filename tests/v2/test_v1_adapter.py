@@ -49,6 +49,17 @@ class V1AdapterTests(unittest.TestCase):
         self.assertIn("--indir", argv)
         self.assertIn("/g", argv)
 
+    def test_absolute_out_is_rejected_to_prevent_silent_evidence_loss(self):
+        store = self._store("badout", "compare-run")
+        with self.assertRaises(ValueError):
+            run_v1_step(
+                store,
+                run_id="compare-run",
+                subskill="compare",
+                action="ani",
+                flags={"--indir": str(GENOMES), "--out": "/tmp/escapes_workspace.tsv"},
+            )
+
     def test_heavy_action_defers_to_scaffold_with_the_exact_command(self):
         store = self._store("scaffold", "prep-run")
         with self.assertRaises(V1StepNeedsScaffold) as ctx:

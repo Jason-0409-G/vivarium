@@ -139,6 +139,14 @@ def run_v1_step(
     spec = ACTIONS.get((subskill, action))
     if spec is None:
         raise KeyError(f"unknown V1 action: {subskill}:{action}")
+    # Outputs must land in the sealed workspace: an absolute or parent-escaping
+    # --out would write outside it, so the stage would commit with no durable
+    # evidence (silent loss). Inputs may be absolute (read from anywhere).
+    out = flags.get("--out")
+    if out is not None:
+        out_path = Path(str(out))
+        if out_path.is_absolute() or ".." in out_path.parts:
+            raise ValueError(f"--out must be a workspace-relative path, got: {out}")
     env, interpreter = resolve_env()
     argv = v1_step_argv(subskill, action, flags, python=interpreter)
     absent = missing_tools(subskill, action, path=env["PATH"])
