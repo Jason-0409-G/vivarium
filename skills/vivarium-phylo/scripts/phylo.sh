@@ -13,13 +13,14 @@ shift
 
 case "$SUB" in
   tree)
-    INPUT=""; OUT=""; FAST=0; BB=1000; THREADS="AUTO"
+    INPUT=""; OUT=""; FAST=0; BB=1000; THREADS="AUTO"; SEED=42
     while [ $# -gt 0 ]; do case "$1" in
       --input)   INPUT="$2";   shift 2;;
       --out)     OUT="$2";     shift 2;;
       --fast)    FAST=1;       shift 1;;
       --bb)      BB="$2";      shift 2;;
       --threads) THREADS="$2"; shift 2;;
+      --seed)    SEED="$2";    shift 2;;
       *) echo "ERROR: unknown arg: $1" >&2; exit 2;;
     esac; done
     [ -f "$INPUT" ] || { echo "ERROR: --input not found: $INPUT" >&2; exit 1; }
@@ -44,14 +45,14 @@ case "$SUB" in
     if [ "$FAST" -eq 1 ]; then
       need FastTree
       echo "[3/3] FastTree (LG) ..." >&2
-      FastTree -lg "$TREEALN" > "$OUT.treefile" 2>"$OUT.fasttree.log" || { tail -3 "$OUT.fasttree.log" >&2; echo "ERROR: FastTree failed" >&2; exit 1; }
+      FastTree -seed "$SEED" -lg "$TREEALN" > "$OUT.treefile" 2>"$OUT.fasttree.log" || { tail -3 "$OUT.fasttree.log" >&2; echo "ERROR: FastTree failed" >&2; exit 1; }
       TOOL="FastTree -lg"; VER="$(FastTree 2>&1 | grep -i version | head -1 || echo FastTree)"
     else
       need iqtree
       [ "$BB" -ge 1000 ] || { echo "ERROR: --bb must be >=1000 (IQ-TREE ultrafast-bootstrap minimum)" >&2; exit 1; }
       echo "[3/3] IQ-TREE (ModelFinder + $BB UFBoot + SH-aLRT) ..." >&2
-      iqtree -s "$TREEALN" -m MFP -B "$BB" -alrt 1000 -T "$THREADS" --prefix "$OUT" -redo >"$OUT.iqtree.run.log" 2>&1 || { tail -5 "$OUT.iqtree.run.log" >&2; echo "ERROR: iqtree failed (see $OUT.iqtree.run.log)" >&2; exit 1; }
-      TOOL="IQ-TREE -m MFP -B $BB -alrt 1000"; VER="$(iqtree --version 2>&1 | grep -i version | head -1 || echo IQ-TREE)"
+      iqtree -s "$TREEALN" -m MFP -B "$BB" -alrt 1000 -seed "$SEED" -T "$THREADS" --prefix "$OUT" -redo >"$OUT.iqtree.run.log" 2>&1 || { tail -5 "$OUT.iqtree.run.log" >&2; echo "ERROR: iqtree failed (see $OUT.iqtree.run.log)" >&2; exit 1; }
+      TOOL="IQ-TREE -m MFP -B $BB -alrt 1000 -seed $SEED"; VER="$(iqtree --version 2>&1 | grep -i version | head -1 || echo IQ-TREE)"
       MODEL=$(grep -m1 "Best-fit model" "$OUT.iqtree" 2>/dev/null | sed 's/.*: //' || true)
       [ -n "${MODEL:-}" ] && echo "model:   $MODEL (ModelFinder)" >&2
     fi
