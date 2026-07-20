@@ -24,11 +24,14 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
+from .state import DependencyHead
 from .v1_adapter import (
     ACTIONS,
     action_outputs,
+    ingest_v1_step,
     missing_tools,
     resolve_env,
+    run_v1_step,
     v1_stage_workspace,
     v1_step_argv,
 )
@@ -199,6 +202,127 @@ def plan_pipeline(
     return planned
 
 
+def _stage_heads(store) -> dict[str, str]:
+    """The committed object head for each committed stage run, from the ledger."""
+    heads: dict[str, str] = {}
+    for event in store._project_ledger("work").recover().events:
+        if event.event_type == "STAGE_COMMITTED":
+            heads[event.payload["run_id"]] = event.payload["object_head"]
+    return heads
+
+
+def pipeline_status(store, plan: Sequence[PlannedStage]) -> list[dict]:
+    """Per-stage state so a caller can see what has committed, what runs next, and
+    what is waiting on the user. committed | ready-local | pending-scaffold |
+    pending-cluster | blocked."""
+    heads = _stage_heads(store)
+    report = []
+    for stage in plan:
+        upstream_ok = all(dep in heads for dep in stage.depends_on)
+        if stage.run_id in heads:
+            state = "committed"
+        elif not upstream_ok:
+            state = "blocked"
+        elif stage.route == "local_inline":
+            state = "ready-local"
+        elif stage.route == "cluster":
+            state = "pending-cluster"
+        else:
+            state = "pending-scaffold"
+        report.append(
+            {
+                "run_id": stage.run_id,
+                "action": f"{stage.subskill}:{stage.action}",
+                "state": state,
+                "route": stage.route,
+                "command": stage.command,
+                "expected_outputs": list(stage.expected_outputs),
+                "workspace": str(v1_stage_workspace(store, stage.run_id)),
+                "depends_on": list(stage.depends_on),
+            }
+        )
+    return report
+
+
+def drive_pipeline(store, plan: Sequence[PlannedStage]) -> list[dict]:
+    """Run every ready local stage in order, committing each into the ledger, and
+    stop at the first stage that must be done by the user (scaffold/cluster) or that
+    is blocked. Idempotent/resumable: already-committed stages are skipped, so after
+    the user ingests a paused stage, calling drive_pipeline again continues. Returns
+    one record per stage up to and including the stop point."""
+    heads = _stage_heads(store)
+    registered = set(store._registered_run_ids())
+    outcome: list[dict] = []
+    for stage in plan:
+        if stage.run_id in heads:
+            outcome.append({"run_id": stage.run_id, "state": "committed"})
+            continue
+        if not all(dep in heads for dep in stage.depends_on):
+            outcome.append({"run_id": stage.run_id, "state": "blocked"})
+            break
+        if stage.route != "local_inline":
+            # Register the run and create its workspace now, so the user has a
+            # ready place to drop the tool's outputs before ingesting.
+            if stage.run_id not in registered:
+                store.register_run(stage.run_id, analysis_state="EXECUTION_PENDING")
+                registered.add(stage.run_id)
+            workspace = v1_stage_workspace(store, stage.run_id)
+            workspace.mkdir(parents=True, exist_ok=True)
+            outcome.append(
+                {
+                    "run_id": stage.run_id,
+                    "state": "pending-cluster" if stage.route == "cluster" else "pending-scaffold",
+                    "command": stage.command,
+                    "workspace": str(workspace),
+                    "expected_outputs": list(stage.expected_outputs),
+                }
+            )
+            break
+        if stage.run_id not in registered:
+            store.register_run(stage.run_id, analysis_state="EXECUTION_PENDING")
+            registered.add(stage.run_id)
+        dependencies = tuple(
+            DependencyHead("work", f"stage:{dep}", heads[dep]) for dep in stage.depends_on
+        )
+        step = run_v1_step(
+            store,
+            run_id=stage.run_id,
+            subskill=stage.subskill,
+            action=stage.action,
+            flags=stage.flags,
+            dependencies=dependencies,
+        )
+        if not step.committed:
+            outcome.append({"run_id": stage.run_id, "state": "failed"})
+            break
+        heads[stage.run_id] = step.stage_committed_event.payload["object_head"]
+        outcome.append({"run_id": stage.run_id, "state": "committed"})
+    return outcome
+
+
+def ingest_scaffolded_stage(
+    store, plan: Sequence[PlannedStage], run_id: str
+) -> "StepCommit":  # noqa: F821
+    """After the user has run a paused scaffold/cluster stage and dropped its
+    outputs into that stage's workspace, seal them as the committed stage. The
+    expected outputs + DAG edges come from the plan."""
+    heads = _stage_heads(store)
+    stage = next(s for s in plan if s.run_id == run_id)
+    if run_id not in set(store._registered_run_ids()):
+        store.register_run(run_id, analysis_state="EXECUTION_PENDING")
+    dependencies = tuple(
+        DependencyHead("work", f"stage:{dep}", heads[dep]) for dep in stage.depends_on
+    )
+    return ingest_v1_step(
+        store,
+        run_id=run_id,
+        subskill=stage.subskill,
+        action=stage.action,
+        flags=stage.flags,
+        dependencies=dependencies,
+    )
+
+
 __all__ = [
     "GOALS",
     "PlannedStage",
@@ -206,4 +330,7 @@ __all__ = [
     "route_stage",
     "cluster_script",
     "plan_pipeline",
+    "pipeline_status",
+    "drive_pipeline",
+    "ingest_scaffolded_stage",
 ]
