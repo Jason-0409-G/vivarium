@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from skills.vivarium.vivarium_v2.v1_adapter import (
     V1StepNeedsScaffold,
     ingest_v1_step,
     missing_tools,
+    resolve_env,
     run_v1_step,
     v1_stage_workspace,
     v1_step_argv,
@@ -16,6 +18,14 @@ from tests.v2.support import FrozenClock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENOMES = REPO_ROOT / "tests" / "data" / "genomes"
+
+_ENV, _PYTHON = resolve_env()
+_HAS_PLOT_LIBS = (
+    subprocess.run(
+        [_PYTHON, "-c", "import pandas, matplotlib"], capture_output=True
+    ).returncode
+    == 0
+)
 
 
 class V1AdapterTests(unittest.TestCase):
@@ -82,6 +92,28 @@ class V1AdapterTests(unittest.TestCase):
         state = store.recover()
         run = next(item for item in state.federated_states if item.run_id == "annotate-run")
         self.assertNotEqual(run.analysis_state.value, "COMMITTED")
+
+    @unittest.skipUnless(_HAS_PLOT_LIBS, "resolved python lacks pandas/matplotlib")
+    def test_report_heatmap_runs_through_the_durable_engine_with_injected_env(self):
+        # report:heatmap needs pandas/matplotlib, which live in the bio env, not
+        # necessarily the harness's own python. The adapter injects the resolved
+        # interpreter + PATH so plot.py runs; the figure commits as durable evidence.
+        store = self._store("report", "report-run")
+        workspace = v1_stage_workspace(store, "report-run")
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "ani_matrix.tsv").write_text(
+            "genome\tA\tB\nA\t100.00\t95.20\nB\t95.20\t100.00\n", encoding="ascii"
+        )
+        step = run_v1_step(
+            store,
+            run_id="report-run",
+            subskill="report",
+            action="heatmap",
+            flags={"--input": "ani_matrix.tsv", "--out": "heatmap"},
+        )
+        self.assertTrue(step.committed)
+        figures = [p for p in workspace.glob("heatmap.*") if p.stat().st_size > 0]
+        self.assertTrue(figures, "a real figure file must be produced and sealed")
 
     @unittest.skipUnless(
         shutil.which("fastANI") and (GENOMES / "S_vesiculosa_M7.fna").is_file(),

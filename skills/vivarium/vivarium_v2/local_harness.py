@@ -32,7 +32,7 @@ import subprocess
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from .canonical import canonical_bytes, domain_hash, durable_replace
 from .errors import IntegrityError
@@ -89,9 +89,14 @@ class LocalProcessHarness:
         self,
         root: str | Path,
         *,
+        env: Mapping[str, str] | None = None,
         output_quiescence_seconds: float = DEFAULT_OUTPUT_QUIESCENCE_SECONDS,
     ):
         self.root = Path(root)
+        # env=None inherits the harness process env (the default). A caller (e.g.
+        # the V1 adapter) passes an explicit env to put the bioinformatics toolchain
+        # on PATH, since the harness spawns argv directly with no shell/conda.
+        self.env = dict(env) if env is not None else None
         self.output_quiescence_seconds = output_quiescence_seconds
         self._state: dict[str, dict[str, Any]] = {}
 
@@ -155,6 +160,7 @@ class LocalProcessHarness:
                 stdout=out,
                 stderr=err,
                 start_new_session=True,
+                env=self.env,
             )
             pid = process.pid
             # start_new_session makes the child its own session/group leader.

@@ -13,6 +13,7 @@ into the attempt workspace to be sealed (the scaffold/ingest path).
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -23,6 +24,24 @@ from .loop import StepCommit, perform_one_step
 from .state import DependencyHead
 
 _SKILLS = Path(__file__).resolve().parents[2]
+
+# The bioinformatics toolchain lives in a conda env (default /opt/anaconda3);
+# override with VIVARIUM_CONDA_PREFIX. The harness spawns argv directly with no
+# shell/conda, so the adapter builds an explicit env that puts that env's bin on
+# PATH and selects its interpreter, and passes it through to the process.
+DEFAULT_CONDA_PREFIX = "/opt/anaconda3"
+
+
+def resolve_env() -> tuple[dict[str, str], str]:
+    """Return (process env with the bio toolchain on PATH, interpreter path)."""
+    prefix = Path(os.environ.get("VIVARIUM_CONDA_PREFIX", DEFAULT_CONDA_PREFIX))
+    env = dict(os.environ)
+    bin_dir = str(prefix / "bin")
+    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    python = prefix / "bin" / "python"
+    interpreter = str(python) if python.exists() else sys.executable
+    env["VIVARIUM_PY"] = interpreter
+    return env, interpreter
 
 V1_SCRIPTS = {
     "prep": _SKILLS / "vivarium-prep" / "scripts" / "prep.sh",
@@ -81,20 +100,26 @@ def _flatten(flags: Mapping[str, object]) -> list[str]:
     return out
 
 
-def v1_step_argv(subskill: str, action: str, flags: Mapping[str, object]) -> list[str]:
+def v1_step_argv(
+    subskill: str,
+    action: str,
+    flags: Mapping[str, object],
+    *,
+    python: str | None = None,
+) -> list[str]:
     if subskill == "report":
-        return [sys.executable, str(REPORT_PY), action, *_flatten(flags)]
+        return [python or sys.executable, str(REPORT_PY), action, *_flatten(flags)]
     script = V1_SCRIPTS.get(subskill)
     if script is None:
         raise KeyError(f"unknown V1 sub-skill: {subskill}")
     return ["bash", str(script), action, *_flatten(flags)]
 
 
-def missing_tools(subskill: str, action: str) -> list[str]:
+def missing_tools(subskill: str, action: str, *, path: str | None = None) -> list[str]:
     spec = ACTIONS.get((subskill, action))
     if spec is None:
         raise KeyError(f"unknown V1 action: {subskill}:{action}")
-    return [tool for tool in spec["tools"] if shutil.which(tool) is None]
+    return [tool for tool in spec["tools"] if shutil.which(tool, path=path) is None]
 
 
 def run_v1_step(
@@ -114,8 +139,9 @@ def run_v1_step(
     spec = ACTIONS.get((subskill, action))
     if spec is None:
         raise KeyError(f"unknown V1 action: {subskill}:{action}")
-    argv = v1_step_argv(subskill, action, flags)
-    absent = missing_tools(subskill, action)
+    env, interpreter = resolve_env()
+    argv = v1_step_argv(subskill, action, flags, python=interpreter)
+    absent = missing_tools(subskill, action, path=env["PATH"])
     if spec["mode"] == "scaffold" or absent:
         raise V1StepNeedsScaffold(subskill, action, tuple(absent), tuple(argv))
     return perform_one_step(
@@ -125,6 +151,7 @@ def run_v1_step(
         dependencies=dependencies,
         stage_id=stage_id,
         attempt_id=attempt_id,
+        env=env,
     )
 
 
@@ -170,6 +197,7 @@ __all__ = [
     "v1_stage_workspace",
     "v1_step_argv",
     "missing_tools",
+    "resolve_env",
     "V1StepNeedsScaffold",
     "ACTIONS",
 ]

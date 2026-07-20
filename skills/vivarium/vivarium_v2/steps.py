@@ -9,7 +9,7 @@ built on; committing the result into the project ledger is the next layer.
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .canonical import domain_hash
 from .execution import ExecutionIntent, LocalExecutionBroker, LocalExecutionResult
@@ -25,6 +25,7 @@ def run_local_step(
     attempt_id: str = "attempt-1",
     execution_intent_id: str | None = None,
     request_key: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> LocalExecutionResult:
     """Run argv as a real local process in the attempt workspace and freeze its
     durable execution evidence. The run must already be EXECUTION_PENDING on its
@@ -47,7 +48,7 @@ def run_local_step(
         domain_hash("vivarium-execution-environment/v1", {"argv0": argv[0]}),
         request_key or f"request:{run_id}:{stage_id}:{attempt_id}",
     )
-    broker = LocalExecutionBroker(store, LocalProcessHarness(store.root))
+    broker = LocalExecutionBroker(store, LocalProcessHarness(store.root, env=env))
     return broker.run_or_recover(intent)
 
 

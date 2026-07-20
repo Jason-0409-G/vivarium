@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from .canonical import domain_hash
 from .evidence import (
@@ -137,12 +137,14 @@ def perform_one_step(
     attempt_id: str = "attempt-1",
     commit_tx_id: str | None = None,
     dependencies: Sequence[DependencyHead] = (),
+    env: Mapping[str, str] | None = None,
 ) -> StepCommit:
     """Execute argv as a real local process and, on success, commit the stage into
     the project ledger through the full validated lifecycle. dependencies declares
-    the prior committed stage objects this stage builds on (the DAG edges). On a
-    non-success execution the run is left at its failure state and nothing is
-    committed."""
+    the prior committed stage objects this stage builds on (the DAG edges). env, if
+    given, is the process environment (used to put the bioinformatics toolchain on
+    PATH). On a non-success execution the run is left at its failure state and
+    nothing is committed."""
     commit_tx_id = commit_tx_id or f"commit:{run_id}:{stage_id}:{attempt_id}"
     execution_intent_id = f"exec:{run_id}:{stage_id}:{attempt_id}"
     result = run_local_step(
@@ -152,6 +154,7 @@ def perform_one_step(
         stage_id=stage_id,
         attempt_id=attempt_id,
         execution_intent_id=execution_intent_id,
+        env=env,
     )
     if result.classification.outcome != "success" or result.proof is None:
         return StepCommit(result, False, commit_tx_id, None, "scientifically_invalid")
