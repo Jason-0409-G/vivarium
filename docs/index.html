@@ -9,7 +9,7 @@
   <meta property="og:title" content="Vivarium 2.0 — Durable comparative-genomics workflows">
   <meta property="og:description" content="Plan, run, verify, record, and resume comparative-genomics analyses in Claude Code and Codex.">
   <meta property="og:url" content="https://jason-0409-g.github.io/vivarium/">
-  <meta property="og:image" content="https://jason-0409-g.github.io/vivarium/media/vivarium-hero-generated.png">
+  <meta property="og:image" content="https://jason-0409-g.github.io/vivarium/media/vivarium-mechanism-clean.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://jason-0409-g.github.io/vivarium/">
   <link rel="stylesheet" href="./site.css">
@@ -52,17 +52,17 @@
     <section class="hero" id="top">
       <div class="hero-grid">
         <div class="hero-copy reveal">
-          <div class="eyebrow"><span class="pulse"></span><span data-zh="v2.0.1 · 持续维护" data-en="v2.0.1 · Actively maintained">v2.0.1 · 持续维护</span></div>
+          <div class="eyebrow"><span class="pulse"></span><span data-zh="v2.0.2 · 持续维护" data-en="v2.0.2 · Actively maintained">v2.0.2 · 持续维护</span></div>
           <h1>
             <span data-zh="面向比较基因组学的" data-en="Comparative-genomics workflows with">面向比较基因组学的</span>
             <em data-zh="可验证、可恢复分析工作流" data-en="verification and deterministic recovery">可验证、可恢复分析工作流</em>
           </h1>
-          <p class="hero-lead" data-zh="vivarium 为 Claude Code 与 Codex 提供比较基因组分析工作流：将研究目标解析为有序阶段，调用真实生物信息学工具，对阶段产物实施提交前校验，并依据持久化账本恢复中断任务。" data-en="vivarium provides comparative-genomics workflows for Claude Code and Codex. It resolves research goals into ordered stages, invokes real bioinformatics tools, validates stage artifacts before commit, and recovers interrupted work from a persistent ledger.">vivarium 为 Claude Code 与 Codex 提供比较基因组分析工作流：将研究目标解析为有序阶段，调用真实生物信息学工具，对阶段产物实施提交前校验，并依据持久化账本恢复中断任务。</p>
+          <p class="hero-lead" data-zh="vivarium 将比较基因组研究目标转换为可执行的分析阶段：调用真实生物信息学工具，在提交前校验产物，并从仅追加事件日志恢复中断任务。同一组工作流可用于 Claude Code、Codex 及兼容 Agent Skills 的主流客户端。" data-en="vivarium converts comparative-genomics objectives into executable analysis stages. It invokes real bioinformatics tools, validates artifacts before commit, and recovers interrupted work from an append-only event log. The same workflow contracts can be used by Claude Code, Codex, and other Agent Skills-compatible clients.">vivarium 将比较基因组研究目标转换为可执行的分析阶段：调用真实生物信息学工具，在提交前校验产物，并从仅追加事件日志恢复中断任务。同一组工作流可用于 Claude Code、Codex 及兼容 Agent Skills 的主流客户端。</p>
           <div class="hero-actions">
             <a class="button primary" href="#install"><span data-zh="立即安装" data-en="Install now">立即安装</span><span aria-hidden="true">↓</span></a>
             <a class="button secondary" href="#workflow"><span data-zh="了解工作流" data-en="Review the workflow">了解工作流</span><span aria-hidden="true">→</span></a>
           </div>
-          <p class="client-line"><span data-zh="同等支持" data-en="Equivalent support">同等支持</span> <strong>Claude Code</strong> <span>+</span> <strong>Codex</strong></p>
+          <p class="client-line"><span data-zh="原生分发" data-en="Native distribution">原生分发</span> <strong>Claude Code</strong> <span>+</span> <strong>Codex</strong> <span data-zh="· 兼容 OpenCode / OpenClaw / Hermes" data-en="· compatible with OpenCode / OpenClaw / Hermes">· 兼容 OpenCode / OpenClaw / Hermes</span></p>
         </div>
 
         <figure class="hero-visual reveal">
@@ -74,7 +74,7 @@
 
       <div class="stat-strip reveal" aria-label="Project statistics">
         <div><strong>6</strong><span data-zh="工作流技能" data-en="workflow skills">工作流技能</span></div>
-        <div><strong>2</strong><span data-zh="平级客户端" data-en="peer clients">平级客户端</span></div>
+        <div><strong>5</strong><span data-zh="支持的 Agent 客户端" data-en="supported agent clients">支持的 Agent 客户端</span></div>
         <div><strong>69</strong><span data-zh="触发测试" data-en="trigger tests">触发测试</span></div>
         <div><strong>100%</strong><span data-zh="基准断言通过率" data-en="benchmark assertions passed">基准断言通过率</span></div>
       </div>
@@ -105,12 +105,12 @@
         </li>
         <li class="workflow-card reveal">
           <span class="step-number">04</span>
-          <div><h3 data-zh="证据记录与阶段提交" data-en="Evidence recording and stage commit">证据记录与阶段提交</h3><p data-zh="将产物、精确命令、工具版本与校验记录绑定到阶段，并在通过提交闸门后追加写入账本。" data-en="Bind artifacts, exact commands, tool versions, and validation records to the stage, then append them to the ledger after the commit gate passes.">将产物、精确命令、工具版本与校验记录绑定到阶段，并在通过提交闸门后追加写入账本。</p></div>
+          <div><h3 data-zh="证据记录与阶段提交" data-en="Evidence recording and stage commit">证据记录与阶段提交</h3><p data-zh="将产物、精确命令、工具版本与校验记录绑定到阶段，并在通过提交闸门后追加写入事件日志。" data-en="Bind artifacts, exact commands, tool versions, and validation records to the stage, then append them to the event log after the commit gate passes.">将产物、精确命令、工具版本与校验记录绑定到阶段，并在通过提交闸门后追加写入事件日志。</p></div>
           <span class="step-result" data-zh="计算结论可追溯" data-en="Traceable computational claims">计算结论可追溯</span>
         </li>
         <li class="workflow-card reveal">
           <span class="step-number">05</span>
-          <div><h3 data-zh="账本驱动的状态恢复" data-en="Ledger-driven state recovery">账本驱动的状态恢复</h3><p data-zh="从已验证事件重建流程状态，对已提交阶段保持幂等，并从首个未完成阶段继续执行。" data-en="Reconstruct workflow state from verified events, preserve idempotence for committed stages, and continue from the first incomplete stage.">从已验证事件重建流程状态，对已提交阶段保持幂等，并从首个未完成阶段继续执行。</p></div>
+          <div><h3 data-zh="基于事件日志的状态恢复" data-en="Event-log-based state recovery">基于事件日志的状态恢复</h3><p data-zh="从已验证事件重建流程状态，对已提交阶段保持幂等，并从首个未完成阶段继续执行。" data-en="Reconstruct workflow state from verified events, preserve idempotence for committed stages, and continue from the first incomplete stage.">从已验证事件重建流程状态，对已提交阶段保持幂等，并从首个未完成阶段继续执行。</p></div>
           <span class="step-result" data-zh="避免重复执行已提交阶段" data-en="Committed stages are not repeated">避免重复执行已提交阶段</span>
         </li>
       </ol>
@@ -123,7 +123,7 @@
       </div>
       <div class="feature-grid">
         <article class="feature-card reveal"><span class="feature-icon">✓</span><h3 data-zh="提交前验证" data-en="Pre-commit validation">提交前验证</h3><p data-zh="进程正常启动并不等同于阶段成功。仅当退出状态、预期产物与持久化证据均满足约束时，阶段方可提交。" data-en="Process invocation does not establish stage success. A stage is committed only when exit status, expected artifacts, and persistent evidence satisfy the defined constraints.">进程正常启动并不等同于阶段成功。仅当退出状态、预期产物与持久化证据均满足约束时，阶段方可提交。</p></article>
-        <article class="feature-card reveal"><span class="feature-icon">↻</span><h3 data-zh="确定性状态恢复" data-en="Deterministic state recovery">确定性状态恢复</h3><p data-zh="流程状态由同一事件账本按字节重建；已提交阶段保持幂等，恢复过程不重复执行这些阶段。" data-en="Workflow state is reconstructed byte-for-byte from the same event ledger. Committed stages remain idempotent and are not repeated during recovery.">流程状态由同一事件账本按字节重建；已提交阶段保持幂等，恢复过程不重复执行这些阶段。</p></article>
+        <article class="feature-card reveal"><span class="feature-icon">↻</span><h3 data-zh="确定性状态恢复" data-en="Deterministic state recovery">确定性状态恢复</h3><p data-zh="流程状态由同一仅追加事件日志按字节重建；已提交阶段保持幂等，恢复过程不重复执行这些阶段。" data-en="Workflow state is reconstructed byte-for-byte from the same append-only event log. Committed stages remain idempotent and are not repeated during recovery.">流程状态由同一仅追加事件日志按字节重建；已提交阶段保持幂等，恢复过程不重复执行这些阶段。</p></article>
         <article class="feature-card reveal"><span class="feature-icon">⌁</span><h3 data-zh="产物驱动的结果复述" data-en="Artifact-grounded reporting">产物驱动的结果复述</h3><p data-zh="结果汇报读取已经校验并密封的计算产物与事件记录，不以语言模型的会话记忆作为数值依据。" data-en="Reporting reads validated, sealed computational artifacts and event records rather than treating language-model conversation memory as a numerical authority.">结果汇报读取已经校验并密封的计算产物与事件记录，不以语言模型的会话记忆作为数值依据。</p></article>
         <article class="feature-card reveal"><span class="feature-icon">⇄</span><h3 data-zh="显式执行边界" data-en="Explicit execution boundaries">显式执行边界</h3><p data-zh="资源可容纳的阶段可在本地执行；计算密集型阶段生成可审计的集群作业脚本。当前版本不自动提交或轮询集群作业。" data-en="Stages within local resource capacity may execute locally; compute-intensive stages produce auditable cluster job scripts. The current release does not submit or poll cluster jobs automatically.">资源可容纳的阶段可在本地执行；计算密集型阶段生成可审计的集群作业脚本。当前版本不自动提交或轮询集群作业。</p></article>
       </div>
@@ -135,12 +135,12 @@
         <h2 data-zh="六项技能，可以单独使用，也可以组成完整流程" data-en="Six skills, usable alone or as one complete workflow">六项技能，可以单独使用，也可以组成完整流程</h2>
       </div>
       <div class="skill-grid">
-        <article class="skill-card featured reveal"><span class="skill-code">CORE</span><h3>vivarium</h3><p data-zh="理解目标、组织阶段、驱动 2.0 持久化流程。" data-en="Interpret goals, organize stages, and drive the durable 2.0 workflow.">理解目标、组织阶段、驱动 2.0 持久化流程。</p><span data-zh="完整流程" data-en="Complete workflow">完整流程</span></article>
-        <article class="skill-card reveal"><span class="skill-code">PREP</span><h3>vivarium-prep</h3><p data-zh="组装统计、质量评估和基因功能注释。" data-en="Assembly statistics, quality assessment, and annotation.">组装统计、质量评估和基因功能注释。</p><span data-zh="质控与注释" data-en="QC and annotation">质控与注释</span></article>
-        <article class="skill-card reveal"><span class="skill-code">CMP</span><h3>vivarium-compare</h3><p data-zh="ANI、AAI、直系同源关系和基因组共线性。" data-en="ANI, AAI, orthology, and genome synteny.">ANI、AAI、直系同源关系和基因组共线性。</p><span data-zh="基因组比较" data-en="Genome comparison">基因组比较</span></article>
-        <article class="skill-card reveal"><span class="skill-code">TREE</span><h3>vivarium-phylo</h3><p data-zh="序列比对、修剪、系统发育树和选择分析。" data-en="Alignment, trimming, phylogeny, and selection analysis.">序列比对、修剪、系统发育树和选择分析。</p><span data-zh="系统发育" data-en="Phylogenetics">系统发育</span></article>
-        <article class="skill-card reveal"><span class="skill-code">FIND</span><h3>vivarium-search</h3><p data-zh="BLAST、DIAMOND 和 HMMER 序列检索。" data-en="BLAST, DIAMOND, and HMMER sequence search.">BLAST、DIAMOND 和 HMMER 序列检索。</p><span data-zh="序列搜索" data-en="Sequence search">序列搜索</span></article>
-        <article class="skill-card reveal"><span class="skill-code">FIG</span><h3>vivarium-report</h3><p data-zh="标准化图表、表格、方法记录和多格式导出。" data-en="Standardized figures, tables, methods records, and multi-format export.">标准化图表、表格、方法记录和多格式导出。</p><span data-zh="报告与出图" data-en="Reports and figures">报告与出图</span></article>
+        <a class="skill-card featured reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">CORE</span><h3>vivarium</h3><p data-zh="理解目标、组织阶段、驱动 2.0 持久化流程。" data-en="Interpret goals, organize stages, and drive the durable 2.0 workflow.">理解目标、组织阶段、驱动 2.0 持久化流程。</p><span data-zh="查看完整流程 ↗" data-en="Open workflow contract ↗">查看完整流程 ↗</span></a>
+        <a class="skill-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium-prep/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">PREP</span><h3>vivarium-prep</h3><p data-zh="组装统计、质量评估和基因功能注释。" data-en="Assembly statistics, quality assessment, and annotation.">组装统计、质量评估和基因功能注释。</p><span data-zh="查看工作流 ↗" data-en="Open workflow contract ↗">查看工作流 ↗</span></a>
+        <a class="skill-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium-compare/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">CMP</span><h3>vivarium-compare</h3><p data-zh="ANI、AAI、直系同源关系和基因组共线性。" data-en="ANI, AAI, orthology, and genome synteny.">ANI、AAI、直系同源关系和基因组共线性。</p><span data-zh="查看工作流 ↗" data-en="Open workflow contract ↗">查看工作流 ↗</span></a>
+        <a class="skill-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium-phylo/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">TREE</span><h3>vivarium-phylo</h3><p data-zh="序列比对、修剪、系统发育树和选择分析。" data-en="Alignment, trimming, phylogeny, and selection analysis.">序列比对、修剪、系统发育树和选择分析。</p><span data-zh="查看工作流 ↗" data-en="Open workflow contract ↗">查看工作流 ↗</span></a>
+        <a class="skill-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium-search/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">FIND</span><h3>vivarium-search</h3><p data-zh="BLAST、DIAMOND 和 HMMER 序列检索。" data-en="BLAST, DIAMOND, and HMMER sequence search.">BLAST、DIAMOND 和 HMMER 序列检索。</p><span data-zh="查看工作流 ↗" data-en="Open workflow contract ↗">查看工作流 ↗</span></a>
+        <a class="skill-card reveal" href="https://github.com/Jason-0409-G/vivarium/blob/master/skills/vivarium-report/SKILL.md" target="_blank" rel="noreferrer"><span class="skill-code">FIG</span><h3>vivarium-report</h3><p data-zh="标准化图表、表格、方法记录和多格式导出。" data-en="Standardized figures, tables, methods records, and multi-format export.">标准化图表、表格、方法记录和多格式导出。</p><span data-zh="查看工作流 ↗" data-en="Open workflow contract ↗">查看工作流 ↗</span></a>
       </div>
     </section>
 
@@ -158,16 +158,18 @@
       </div>
       <div class="benchmark-figures">
         <figure class="benchmark-figure reveal">
-          <a href="./figures/benchmark_v1_chart.svg" target="_blank" rel="noreferrer">
-            <img src="./figures/benchmark_v1_chart.svg" loading="lazy" alt="Vivarium 1.0 skill and no-skill benchmark comparison" data-alt-zh="vivarium 1.0 skill 与无 skill 基线的断言通过率和运行时间比较" data-alt-en="Vivarium 1.0 skill and no-skill baseline comparison of assertion pass rate and runtime">
-          </a>
-          <figcaption data-zh="1.0 单任务基准：四类分析任务的断言通过率与平均墙钟时间。" data-en="Version 1.0 single-task benchmark: assertion pass rate and mean wall-clock time across four analysis tasks.">1.0 单任务基准：四类分析任务的断言通过率与平均墙钟时间。</figcaption>
+          <div class="benchmark-comparison" aria-label="Version 1.0 benchmark summary">
+            <div><strong>100%</strong><span class="result-bar" style="--bar: 100%"></span><small>vivarium</small></div>
+            <div><strong>82%</strong><span class="result-bar baseline" style="--bar: 82%"></span><small>baseline</small></div>
+          </div>
+          <figcaption><strong data-zh="1.0 单任务基准" data-en="Version 1.0 single-task benchmark">1.0 单任务基准</strong><span data-zh="四类分析任务的断言通过率；当前记录为 100%，无 skill 基线为 82%。" data-en="Assertion pass rate across four analysis tasks: 100% in the recorded vivarium runs and 82% in the no-skill baseline.">四类分析任务的断言通过率；当前记录为 100%，无 skill 基线为 82%。</span><a href="./figures/benchmark_v1_chart.svg" target="_blank" rel="noreferrer" data-zh="查看完整评测图 ↗" data-en="Open the complete benchmark figure ↗">查看完整评测图 ↗</a></figcaption>
         </figure>
         <figure class="benchmark-figure reveal">
-          <a href="./figures/benchmark_v2_chart.svg" target="_blank" rel="noreferrer">
-            <img src="./figures/benchmark_v2_chart.svg" loading="lazy" alt="Vivarium 2.0 durable-loop and no-skill benchmark comparison" data-alt-zh="vivarium 2.0 持久化流程与无 skill 基线的质量维度和输出 token 比较" data-alt-en="Vivarium 2.0 durable-loop and no-skill baseline comparison of quality dimensions and output tokens">
-          </a>
-          <figcaption data-zh="2.0 多阶段基准：独立评分的质量维度与单次运行输出 token。" data-en="Version 2.0 multi-stage benchmark: independently graded quality dimensions and output tokens per run.">2.0 多阶段基准：独立评分的质量维度与单次运行输出 token。</figcaption>
+          <div class="benchmark-comparison tokens" aria-label="Version 2.0 output-token summary">
+            <div><strong>10.3k</strong><span class="result-bar" style="--bar: 91.4%"></span><small>vivarium 2.0</small></div>
+            <div><strong>11.3k</strong><span class="result-bar baseline" style="--bar: 100%"></span><small>baseline</small></div>
+          </div>
+          <figcaption><strong data-zh="2.0 多阶段基准" data-en="Version 2.0 multi-stage benchmark">2.0 多阶段基准</strong><span data-zh="单次运行输出 token 为 10.3k，无 skill 基线为 11.3k；质量维度见完整图。" data-en="Output tokens per run were 10.3k, compared with 11.3k in the no-skill baseline; independently graded quality dimensions are provided in the complete figure.">单次运行输出 token 为 10.3k，无 skill 基线为 11.3k；质量维度见完整图。</span><a href="./figures/benchmark_v2_chart.svg" target="_blank" rel="noreferrer" data-zh="查看完整评测图 ↗" data-en="Open the complete benchmark figure ↗">查看完整评测图 ↗</a></figcaption>
         </figure>
       </div>
       <div class="benchmark-note reveal">
@@ -179,35 +181,123 @@
     <section class="section mechanism-section" id="mechanism">
       <div class="section-heading reveal">
         <span class="section-kicker" data-zh="技术机制" data-en="Technical mechanism">技术机制</span>
-        <h2 data-zh="流程状态写入账本，而不是留在模型记忆里" data-en="Workflow state lives in a ledger, not in model memory">流程状态写入账本，而不是留在模型记忆里</h2>
+        <h2 data-zh="流程状态写入仅追加事件日志，而不是留在模型记忆里" data-en="Workflow state lives in an append-only event log, not in model memory">流程状态写入仅追加事件日志，而不是留在模型记忆里</h2>
         <p data-zh="下面的机制图展示 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 如何组成一个可恢复闭环。" data-en="The mechanism map shows how PLAN, ROUTE, EXECUTE, VALIDATE, C-1 GATE, SEAL, and RECOVER form a recoverable loop.">下面的机制图展示 PLAN、ROUTE、EXECUTE、VALIDATE、C-1 GATE、SEAL 与 RECOVER 如何组成一个可恢复闭环。</p>
       </div>
-      <a class="mechanism-image reveal" href="./media/vivarium-v2-durable-loop-4k.png" target="_blank" rel="noreferrer">
-        <img src="./media/vivarium-v2-durable-loop-4k.png" width="3840" height="2160" loading="lazy" alt="Vivarium 2.0 durable-loop mechanism map">
-        <span data-zh="点击查看 4K 原图 ↗" data-en="Open the 4K mechanism map ↗">点击查看 4K 原图 ↗</span>
-      </a>
+      <figure class="mechanism-image reveal">
+        <img src="./media/vivarium-mechanism-clean.png" width="1672" height="941" loading="lazy" alt="Text-free Vivarium workflow mechanism illustration" data-alt-zh="无内嵌文字的 vivarium 分析、校验与恢复机制图" data-alt-en="Text-free Vivarium workflow mechanism illustration">
+        <figcaption><strong data-zh="Vivarium 2.0 机制概览" data-en="Vivarium 2.0 mechanism overview">Vivarium 2.0 机制概览</strong><span data-zh="基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。" data-en="Genome inputs pass through planning, routing, real-tool execution, and a four-evidence commit gate before being sealed as verifiable events; recovery is driven by the verified record.">基因组输入经规划、路由、真实工具执行和四证据提交闸门后，被密封为可验证事件；恢复路径由已验证记录驱动。</span><a href="./media/vivarium-v2-durable-loop-4k.png" target="_blank" rel="noreferrer" data-zh="查看带技术标签的 4K 详图 ↗" data-en="Open the labeled 4K technical map ↗">查看带技术标签的 4K 详图 ↗</a></figcaption>
+      </figure>
       <details class="technical-details reveal">
         <summary data-zh="展开内部协议与实现边界" data-en="Open internal protocol and implementation boundaries">展开内部协议与实现边界</summary>
         <div class="details-grid">
-          <div><h3 data-zh="事件账本" data-en="Event ledger">事件账本</h3><p data-zh="受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL；未完成尾行会被隔离。" data-en="Restricted RFC 8785/JCS canonical JSON, domain-separated SHA-256 digests, and append-only JSONL; incomplete trailing records are isolated.">受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL；未完成尾行会被隔离。</p></div>
+          <div><h3 data-zh="仅追加事件日志" data-en="Append-only event log">仅追加事件日志</h3><p data-zh="受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL；未完成尾行会被隔离。" data-en="Restricted RFC 8785/JCS canonical JSON, domain-separated SHA-256 digests, and append-only JSONL; incomplete trailing records are isolated.">受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL；未完成尾行会被隔离。</p></div>
           <div><h3 data-zh="C-1 提交闸门" data-en="C-1 commit gate">C-1 提交闸门</h3><p data-zh="证据包、成功完成记录、quorum pass 和完成证明必须全部一致，失败或空产物不得密封。" data-en="The evidence bundle, successful-completion record, quorum pass, and completion proof must agree; failures and empty artifacts cannot be sealed.">证据包、成功完成记录、quorum pass 和完成证明必须全部一致，失败或空产物不得密封。</p></div>
-          <div><h3 data-zh="确定性恢复" data-en="Deterministic recovery">确定性恢复</h3><p data-zh="指由同一账本按字节重建流程状态，不承诺不同系统、硬件或工具版本产生位级一致的分析结果。" data-en="This means byte-for-byte reconstruction of workflow state from the same ledger, not bitwise-identical analytical results across systems, hardware, or tool versions.">指由同一账本按字节重建流程状态，不承诺不同系统、硬件或工具版本产生位级一致的分析结果。</p></div>
+          <div><h3 data-zh="确定性恢复" data-en="Deterministic recovery">确定性恢复</h3><p data-zh="指由同一事件日志按字节重建流程状态，不承诺不同系统、硬件或工具版本产生位级一致的分析结果。" data-en="This means byte-for-byte reconstruction of workflow state from the same event log, not bitwise-identical analytical results across systems, hardware, or tool versions.">指由同一事件日志按字节重建流程状态，不承诺不同系统、硬件或工具版本产生位级一致的分析结果。</p></div>
         </div>
       </details>
+    </section>
+
+    <section class="section cli-setup-section" id="cli-setup">
+      <div class="section-heading reveal">
+        <span class="section-kicker" data-zh="客户端准备" data-en="Client prerequisites">客户端准备</span>
+        <h2 data-zh="先安装 Agent CLI，再安装 vivarium" data-en="Install an agent CLI before installing vivarium">先安装 Agent CLI，再安装 vivarium</h2>
+        <p data-zh="以下命令分别来自 Claude Code 与 Codex 的官方安装渠道。国内网络下可使用 npm 镜像加速软件包下载；镜像不代理模型 API，也不改变客户端的认证要求。" data-en="The commands below use the official Claude Code and Codex distribution channels. In constrained networks, an npm mirror may accelerate package download; it does not proxy model APIs or alter client authentication requirements.">以下命令分别来自 Claude Code 与 Codex 的官方安装渠道。国内网络下可使用 npm 镜像加速软件包下载；镜像不代理模型 API，也不改变客户端的认证要求。</p>
+      </div>
+
+      <div class="cli-grid">
+        <article class="cli-card reveal">
+          <div class="cli-card-heading"><span>Claude Code</span><strong>macOS</strong></div>
+          <pre><code>curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+claude doctor</code></pre>
+          <a href="https://docs.anthropic.com/en/docs/claude-code/getting-started" target="_blank" rel="noreferrer" data-zh="官方安装说明 ↗" data-en="Official setup guide ↗">官方安装说明 ↗</a>
+        </article>
+        <article class="cli-card reveal">
+          <div class="cli-card-heading"><span>Claude Code</span><strong>Windows PowerShell</strong></div>
+          <pre><code>irm https://claude.ai/install.ps1 | iex
+claude --version
+claude doctor</code></pre>
+          <a href="https://github.com/Jason-0409-G/scriptorium/blob/main/docs/install-claude-code-windows.md" target="_blank" rel="noreferrer" data-zh="Windows 中文安装指南 ↗" data-en="Chinese Windows setup guide ↗">Windows 中文安装指南 ↗</a>
+        </article>
+        <article class="cli-card reveal">
+          <div class="cli-card-heading"><span>Codex CLI</span><strong>macOS</strong></div>
+          <pre><code>curl -fsSL https://chatgpt.com/codex/install.sh | sh
+codex --version</code></pre>
+          <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer" data-zh="Codex 官方仓库 ↗" data-en="Official Codex repository ↗">Codex 官方仓库 ↗</a>
+        </article>
+        <article class="cli-card reveal">
+          <div class="cli-card-heading"><span>Codex CLI</span><strong>Windows PowerShell</strong></div>
+          <pre><code>powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+codex --version</code></pre>
+          <a href="https://github.com/openai/codex" target="_blank" rel="noreferrer" data-zh="Codex 官方仓库 ↗" data-en="Official Codex repository ↗">Codex 官方仓库 ↗</a>
+        </article>
+      </div>
+
+      <details class="mirror-details reveal">
+        <summary data-zh="国内网络：npm 镜像备用安装" data-en="Constrained networks: npm mirror fallback">国内网络：npm 镜像备用安装</summary>
+        <div class="mirror-grid">
+          <div><h3>Claude Code</h3><pre><code>npm config set registry https://registry.npmmirror.com
+npm install -g @anthropic-ai/claude-code
+claude --version</code></pre></div>
+          <div><h3>Codex CLI</h3><pre><code>npm config set registry https://registry.npmmirror.com
+npm install -g @openai/codex
+codex --version</code></pre></div>
+        </div>
+      </details>
+
+      <div class="provider-guide reveal">
+        <div class="provider-copy">
+          <span class="section-kicker">CC Switch</span>
+          <h3 data-zh="在同一客户端中管理并切换多家模型 API" data-en="Manage and switch multiple model-provider APIs in the same client">在同一客户端中管理并切换多家模型 API</h3>
+          <p data-zh="CC Switch 是可选的供应商配置与本地协议路由工具，不是 vivarium 的运行依赖。它可管理预设或自定义 API 供应商；DeepSeek 仅作为配置示例，不代表 vivarium 绑定或推荐某一模型。" data-en="CC Switch is an optional provider-profile manager and local protocol router, not a vivarium runtime dependency. It can manage presets or custom API providers. DeepSeek is only a configuration example and does not indicate that vivarium is bound to or endorses one model.">CC Switch 是可选的供应商配置与本地协议路由工具，不是 vivarium 的运行依赖。它可管理预设或自定义 API 供应商；DeepSeek 仅作为配置示例，不代表 vivarium 绑定或推荐某一模型。</p>
+          <a class="text-link" href="https://github.com/farion1231/cc-switch/releases/latest" target="_blank" rel="noreferrer" data-zh="从 CC Switch 官方 Releases 获取 ↗" data-en="Download from the official CC Switch Releases page ↗">从 CC Switch 官方 Releases 获取 ↗</a>
+        </div>
+        <ol class="provider-steps">
+          <li><strong data-zh="1. 安装并启动客户端" data-en="1. Install and initialize the client">1. 安装并启动客户端</strong><span data-zh="先按上述步骤安装 Claude Code 或 Codex，并至少启动一次。" data-en="Install Claude Code or Codex using the steps above and launch it at least once.">先按上述步骤安装 Claude Code 或 Codex，并至少启动一次。</span></li>
+          <li><strong data-zh="2. 创建供应商配置" data-en="2. Create a provider profile">2. 创建供应商配置</strong><span data-zh="在 CC Switch 中选择预设或填写自定义 endpoint、模型名和 API key；密钥不得写入仓库、截图或共享文档。" data-en="Choose a preset or enter a custom endpoint, model name, and API key. Never commit or expose credentials in screenshots or shared documents.">在 CC Switch 中选择预设或填写自定义 endpoint、模型名和 API key；密钥不得写入仓库、截图或共享文档。</span></li>
+          <li><strong data-zh="3. DeepSeek 示例" data-en="3. DeepSeek example">3. DeepSeek 示例</strong><span data-zh="Claude Code 可使用 DeepSeek 的 Anthropic 兼容端点；Codex 使用 Responses API，当供应商仅提供 Chat Completions 时，需在 CC Switch 中启用 Codex 本地路由进行协议转换。" data-en="Claude Code can use DeepSeek's Anthropic-compatible endpoint. Codex uses the Responses API; when a provider exposes only Chat Completions, enable CC Switch local routing for Codex to translate the protocol.">Claude Code 可使用 DeepSeek 的 Anthropic 兼容端点；Codex 使用 Responses API，当供应商仅提供 Chat Completions 时，需在 CC Switch 中启用 Codex 本地路由进行协议转换。</span></li>
+          <li><strong data-zh="4. 重启并验证" data-en="4. Restart and verify">4. 重启并验证</strong><span data-zh="切换配置后重启对应客户端，核对当前模型与端点，再安装 vivarium。" data-en="Restart the selected client after switching profiles, verify the active model and endpoint, and then install vivarium.">切换配置后重启对应客户端，核对当前模型与端点，再安装 vivarium。</span></li>
+        </ol>
+      </div>
     </section>
 
     <section class="section install-section" id="install">
       <div class="section-heading reveal">
         <span class="section-kicker" data-zh="安装指南" data-en="Installation">安装指南</span>
-        <h2 data-zh="根据目标客户端选择安装方式" data-en="Select an installation method for the target client">根据目标客户端选择安装方式</h2>
-        <p data-zh="Claude Code 与 Codex 获得同等支持，并使用同一组六项工作流契约。" data-en="Claude Code and Codex receive equivalent support and use the same set of six workflow contracts.">Claude Code 与 Codex 获得同等支持，并使用同一组六项工作流契约。</p>
+        <h2 data-zh="为目标 Agent 客户端安装同一组工作流" data-en="Install the same workflow contracts for the target agent client">为目标 Agent 客户端安装同一组工作流</h2>
+        <p data-zh="Claude Code 与 Codex 提供原生分发入口；OpenCode、OpenClaw 与 Hermes 通过 Agent Skills 目录规约加载同一组六项 SKILL.md 工作流。" data-en="Claude Code and Codex provide native distribution paths. OpenCode, OpenClaw, and Hermes load the same six SKILL.md workflow contracts through their Agent Skills-compatible directories.">Claude Code 与 Codex 提供原生分发入口；OpenCode、OpenClaw 与 Hermes 通过 Agent Skills 目录规约加载同一组六项 SKILL.md 工作流。</p>
       </div>
 
       <div class="install-console reveal">
         <div class="tabs" role="tablist" aria-label="Installation methods">
           <button role="tab" aria-selected="true" aria-controls="panel-claude" id="tab-claude" data-tab="claude">Claude Code</button>
           <button role="tab" aria-selected="false" aria-controls="panel-codex" id="tab-codex" data-tab="codex" tabindex="-1">Codex</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-opencode" id="tab-opencode" data-tab="opencode" tabindex="-1">OpenCode</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-openclaw" id="tab-openclaw" data-tab="openclaw" tabindex="-1">OpenClaw</button>
+          <button role="tab" aria-selected="false" aria-controls="panel-hermes" id="tab-hermes" data-tab="hermes" tabindex="-1">Hermes</button>
           <button role="tab" aria-selected="false" aria-controls="panel-local" id="tab-local" data-tab="local" tabindex="-1"><span data-zh="本地脚本" data-en="Local script">本地脚本</span></button>
+        </div>
+
+        <div class="tab-panel" role="tabpanel" id="panel-opencode" aria-labelledby="tab-opencode" data-panel="opencode" hidden>
+          <div class="panel-copy"><h3 data-zh="安装到 OpenCode skills 目录" data-en="Install into the OpenCode skills directory">安装到 OpenCode skills 目录</h3><p data-zh="安装完成后启动新会话，以便 OpenCode 重新发现技能。" data-en="Start a new session after installation so OpenCode can rediscover skills.">安装完成后启动新会话，以便 OpenCode 重新发现技能。</p></div>
+          <div class="code-block"><button class="copy-button" type="button" data-copy="opencode-code" data-zh="复制" data-en="Copy">复制</button><pre id="opencode-code"><code>git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh --target opencode</code></pre></div>
+        </div>
+
+        <div class="tab-panel" role="tabpanel" id="panel-openclaw" aria-labelledby="tab-openclaw" data-panel="openclaw" hidden>
+          <div class="panel-copy"><h3 data-zh="安装到 OpenClaw skills 目录" data-en="Install into the OpenClaw skills directory">安装到 OpenClaw skills 目录</h3><p data-zh="OpenClaw 会从 ~/.openclaw/skills 读取 Agent Skills 契约。" data-en="OpenClaw reads Agent Skills contracts from ~/.openclaw/skills.">OpenClaw 会从 ~/.openclaw/skills 读取 Agent Skills 契约。</p></div>
+          <div class="code-block"><button class="copy-button" type="button" data-copy="openclaw-code" data-zh="复制" data-en="Copy">复制</button><pre id="openclaw-code"><code>git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh --target openclaw</code></pre></div>
+        </div>
+
+        <div class="tab-panel" role="tabpanel" id="panel-hermes" aria-labelledby="tab-hermes" data-panel="hermes" hidden>
+          <div class="panel-copy"><h3 data-zh="安装到 Hermes skills 目录" data-en="Install into the Hermes skills directory">安装到 Hermes skills 目录</h3><p data-zh="脚本将六项工作流写入 ~/.hermes/skills/vivarium 分类目录。" data-en="The script writes the six workflow contracts under the ~/.hermes/skills/vivarium category.">脚本将六项工作流写入 ~/.hermes/skills/vivarium 分类目录。</p></div>
+          <div class="code-block"><button class="copy-button" type="button" data-copy="hermes-code" data-zh="复制" data-en="Copy">复制</button><pre id="hermes-code"><code>git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh --target hermes</code></pre></div>
         </div>
 
         <div class="tab-panel active" role="tabpanel" id="panel-claude" aria-labelledby="tab-claude" data-panel="claude">
@@ -234,9 +324,11 @@ skills/vivarium-report</code></pre></div>
 cd vivarium
 bash install.sh --target claude   # Claude Code
 bash install.sh --target codex    # Codex
-bash install.sh --target both     # both clients</code></pre></div>
+bash install.sh --target both     # Claude Code + Codex
+bash install.sh --target all      # all five clients</code></pre></div>
         </div>
       </div>
+      <p class="support-note reveal" data-zh="支持口径：Claude Code 插件市场与 Codex Skill Installer 为原生分发路径；OpenCode、OpenClaw 与 Hermes 的安装目录已按各项目公开规范对齐，但尚未完成与 Claude Code/Codex 同等强度的端到端基准验证。" data-en="Support scope: the Claude Code marketplace and Codex Skill Installer are native distribution paths. OpenCode, OpenClaw, and Hermes target directories follow their public specifications, but have not yet received end-to-end benchmark coverage equivalent to Claude Code and Codex.">支持口径：Claude Code 插件市场与 Codex Skill Installer 为原生分发路径；OpenCode、OpenClaw 与 Hermes 的安装目录已按各项目公开规范对齐，但尚未完成与 Claude Code/Codex 同等强度的端到端基准验证。</p>
     </section>
 
     <section class="section quickstart-section" id="quickstart">
@@ -269,7 +361,7 @@ bash install.sh --target both     # both clients</code></pre></div>
     </section>
 
     <section class="final-cta">
-      <div class="reveal"><span class="section-kicker" data-zh="开始使用 vivarium" data-en="Start with vivarium">开始使用 vivarium</span><h2 data-zh="以持久化状态支持可审计的比较基因组分析" data-en="Persistent state for auditable comparative-genomics analysis">以持久化状态支持可审计的比较基因组分析</h2><p data-zh="Claude Code 与 Codex 使用同一套分析技能和持久化工作流契约；安装方式不同，功能边界保持一致。" data-en="Claude Code and Codex use the same analysis skills and durable workflow contracts. Installation differs, while functional boundaries remain aligned.">Claude Code 与 Codex 使用同一套分析技能和持久化工作流契约；安装方式不同，功能边界保持一致。</p></div>
+      <div class="reveal"><span class="section-kicker" data-zh="开始使用 vivarium" data-en="Start with vivarium">开始使用 vivarium</span><h2 data-zh="以持久化状态支持可审计的比较基因组分析" data-en="Persistent state for auditable comparative-genomics analysis">以持久化状态支持可审计的比较基因组分析</h2><p data-zh="Claude Code 与 Codex 使用原生分发路径；OpenCode、OpenClaw 与 Hermes 按 Agent Skills 目录规约加载同一组工作流契约。" data-en="Claude Code and Codex use native distribution paths; OpenCode, OpenClaw, and Hermes load the same workflow contracts through Agent Skills-compatible directories.">Claude Code 与 Codex 使用原生分发路径；OpenCode、OpenClaw 与 Hermes 按 Agent Skills 目录规约加载同一组工作流契约。</p></div>
       <div class="final-actions reveal"><a class="button primary" href="#install" data-zh="查看安装方法" data-en="View installation">查看安装方法</a><a class="button secondary" href="https://github.com/Jason-0409-G/vivarium" target="_blank" rel="noreferrer">GitHub ↗</a></div>
     </section>
   </main>

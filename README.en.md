@@ -1,14 +1,14 @@
 <p align="center">
   <a href="docs/media/vivarium-v2-durable-loop-4k.png">
-    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 event-sourced, crash-safe, evidence-gated execution mechanism" width="100%">
+    <img src="docs/media/vivarium-mechanism-clean.png" alt="Vivarium 2.0 comparative-genomics execution, evidence validation, and recovery mechanism" width="100%">
   </a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f.svg?style=flat-square" alt="MIT license"></a>
-  <a href="https://github.com/Jason-0409-G/vivarium/releases"><img src="https://img.shields.io/badge/release-v2.0.1-0969da.svg?style=flat-square" alt="release v2.0.1"></a>
+  <a href="https://github.com/Jason-0409-G/vivarium/releases"><img src="https://img.shields.io/badge/release-v2.0.2-0969da.svg?style=flat-square" alt="release v2.0.2"></a>
   <a href="https://jason-0409-g.github.io/vivarium/"><img src="https://img.shields.io/badge/website-online-0b7285.svg?style=flat-square" alt="project website"></a>
-  <img src="https://img.shields.io/badge/clients-Claude_Code_%7C_Codex-24292f.svg?style=flat-square" alt="Claude Code and Codex">
+  <img src="https://img.shields.io/badge/clients-5_Agent_clients-24292f.svg?style=flat-square" alt="five supported agent clients">
   <img src="https://img.shields.io/badge/skills-6-0ea5e9.svg?style=flat-square" alt="6 skills">
   <img src="https://img.shields.io/badge/status-actively_maintained-2ea44f.svg?style=flat-square" alt="actively maintained">
   <a href="README.md"><img src="https://img.shields.io/badge/language-中文-2563eb.svg?style=flat-square" alt="中文 README"></a>
@@ -34,8 +34,8 @@
 | Item | Current status |
 |---|---|
 | **Maintenance** | **Actively maintained and iterated**; subsequent releases will respond to real-data benchmarks, cross-client compatibility tests, and user feedback |
-| **Current release** | `v2.0.1`; 2.0 is the main development line, while the 1.0 analysis scripts remain independently usable |
-| **Supported clients** | Claude Code plugin and Codex skills; both clients use the same `SKILL.md` workflow contracts |
+| **Current release** | `v2.0.2`; 2.0 is the main development line, while the 1.0 analysis scripts remain independently usable |
+| **Supported clients** | Native distribution for Claude Code and Codex; OpenCode, OpenClaw, and Hermes load the same `SKILL.md` workflows through their Agent Skills-compatible directories |
 | **Version record** | Semantic versioning, [`CHANGELOG.md`](CHANGELOG.md), and [GitHub Releases](https://github.com/Jason-0409-G/vivarium/releases) |
 | **Development roadmap** | Inputs, implementation, deliverables, acceptance criteria, dependencies, risks, and status for 14 public tasks are documented in [`docs/VIVARIUM_V2_TASKS.zh-CN.md`](docs/VIVARIUM_V2_TASKS.zh-CN.md) |
 
@@ -84,7 +84,7 @@ skills/vivarium-report
 Keep `--ref master` because `$skill-installer` otherwise attempts `main`. Restart Codex if the new skills do not appear immediately.
 
 <details>
-<summary><strong>Local script installation for Claude Code, Codex, or both</strong></summary>
+<summary><strong>Local script installation for five agent clients</strong></summary>
 
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
@@ -92,6 +92,10 @@ cd vivarium
 bash install.sh --target claude   # installs into ~/.claude/skills/
 bash install.sh --target codex    # installs into $CODEX_HOME/skills
 bash install.sh --target both     # installs into both clients
+bash install.sh --target opencode # installs into ~/.config/opencode/skills
+bash install.sh --target openclaw # installs into ~/.openclaw/skills
+bash install.sh --target hermes   # installs into ~/.hermes/skills/vivarium
+bash install.sh --target all      # installs into all five clients
 ```
 
 The installer does not delete an existing skill in place. It first renames the existing directory to a timestamped backup and then writes the new copy.
@@ -122,7 +126,7 @@ Formal releases are identified by the `version` field in `.claude-plugin/plugin.
 |---|---|
 | **Claude Code marketplace** | `/plugin marketplace update vivarium` → `/plugin update vivarium@vivarium` → `/reload-plugins` |
 | **Codex `$skill-installer`** | Synchronize the same six paths again and retain `--ref master` |
-| **Local script copy** | Run `git pull`, then rerun `bash install.sh --target claude`, `codex`, or `both` |
+| **Local script copy** | Run `git pull`, then rerun `bash install.sh --target <client>` or use `all` |
 | **Codex symlinks** | Run `git pull` in the repository targeted by the links |
 
 Claude Code can enable automatic updates for `vivarium` under `/plugin` → Marketplaces. Reload the plugin or restart the relevant client if the active session still reports an older version.

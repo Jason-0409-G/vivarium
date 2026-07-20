@@ -1,5 +1,5 @@
 #!/bin/bash
-# vivarium local installer for Claude Code and Codex.
+# vivarium local installer for Agent Skills-compatible clients.
 # Copies only skill files; it never installs analysis tools or databases.
 set -eu
 
@@ -9,11 +9,15 @@ CUSTOM_DEST=""
 
 usage() {
   cat <<'EOF'
-Usage: bash install.sh [--target claude|codex|both] [--dest DIRECTORY]
+Usage: bash install.sh [--target claude|codex|opencode|openclaw|hermes|both|all] [--dest DIRECTORY]
 
   --target claude  Install into ~/.claude/skills (default; backward compatible)
   --target codex   Install into $CODEX_HOME/skills (default: ~/.codex/skills)
-  --target both    Install into both client directories
+  --target opencode Install into ~/.config/opencode/skills
+  --target openclaw Install into ~/.openclaw/skills
+  --target hermes  Install into ~/.hermes/skills/vivarium
+  --target both    Install into Claude Code and Codex (backward compatible)
+  --target all     Install into all five supported client directories
   --dest DIRECTORY Override the destination for a single target (testing/custom use)
 EOF
 }
@@ -43,15 +47,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$INSTALL_TARGET" in
-  claude|codex|both) ;;
+  claude|codex|opencode|openclaw|hermes|both|all) ;;
   *)
-    echo "error: --target must be claude, codex, or both" >&2
+    echo "error: unsupported --target: $INSTALL_TARGET" >&2
     exit 2
     ;;
 esac
 
-if [ "$INSTALL_TARGET" = "both" ] && [ -n "$CUSTOM_DEST" ]; then
-  echo "error: --dest cannot be combined with --target both" >&2
+if { [ "$INSTALL_TARGET" = "both" ] || [ "$INSTALL_TARGET" = "all" ]; } && [ -n "$CUSTOM_DEST" ]; then
+  echo "error: --dest cannot be combined with --target $INSTALL_TARGET" >&2
   exit 2
 fi
 
@@ -99,6 +103,9 @@ install_skills() {
 CLAUDE_DEST="$HOME/.claude/skills"
 CODEX_BASE="${CODEX_HOME:-$HOME/.codex}"
 CODEX_DEST="$CODEX_BASE/skills"
+OPENCODE_DEST="$HOME/.config/opencode/skills"
+OPENCLAW_DEST="$HOME/.openclaw/skills"
+HERMES_DEST="$HOME/.hermes/skills/vivarium"
 
 case "$INSTALL_TARGET" in
   claude)
@@ -109,10 +116,30 @@ case "$INSTALL_TARGET" in
     install_skills "Codex" "${CUSTOM_DEST:-$CODEX_DEST}"
     echo "The skills are available to Codex on the next turn; restart if discovery does not refresh."
     ;;
+  opencode)
+    install_skills "OpenCode" "${CUSTOM_DEST:-$OPENCODE_DEST}"
+    echo "Start a new OpenCode session if skill discovery does not refresh."
+    ;;
+  openclaw)
+    install_skills "OpenClaw" "${CUSTOM_DEST:-$OPENCLAW_DEST}"
+    echo "Start a new OpenClaw session if skill discovery does not refresh."
+    ;;
+  hermes)
+    install_skills "Hermes" "${CUSTOM_DEST:-$HERMES_DEST}"
+    echo "Start a new Hermes session if skill discovery does not refresh."
+    ;;
   both)
     install_skills "Claude Code" "$CLAUDE_DEST"
     install_skills "Codex" "$CODEX_DEST"
     echo "Restart either client if skill discovery does not refresh."
+    ;;
+  all)
+    install_skills "Claude Code" "$CLAUDE_DEST"
+    install_skills "Codex" "$CODEX_DEST"
+    install_skills "OpenCode" "$OPENCODE_DEST"
+    install_skills "OpenClaw" "$OPENCLAW_DEST"
+    install_skills "Hermes" "$HERMES_DEST"
+    echo "Start a new client session if skill discovery does not refresh."
     ;;
 esac
 

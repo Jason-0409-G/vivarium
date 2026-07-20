@@ -1,14 +1,14 @@
 <p align="center">
   <a href="docs/media/vivarium-v2-durable-loop-4k.png">
-    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 事件溯源、崩溃安全与证据闸门机制图" width="100%">
+    <img src="docs/media/vivarium-mechanism-clean.png" alt="Vivarium 2.0 比较基因组分析、证据校验与状态恢复机制图" width="100%">
   </a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f.svg?style=flat-square" alt="MIT license"></a>
-  <a href="https://github.com/Jason-0409-G/vivarium/releases"><img src="https://img.shields.io/badge/release-v2.0.1-0969da.svg?style=flat-square" alt="release v2.0.1"></a>
+  <a href="https://github.com/Jason-0409-G/vivarium/releases"><img src="https://img.shields.io/badge/release-v2.0.2-0969da.svg?style=flat-square" alt="release v2.0.2"></a>
   <a href="https://jason-0409-g.github.io/vivarium/"><img src="https://img.shields.io/badge/website-online-0b7285.svg?style=flat-square" alt="project website"></a>
-  <img src="https://img.shields.io/badge/clients-Claude_Code_%7C_Codex-24292f.svg?style=flat-square" alt="Claude Code and Codex">
+  <img src="https://img.shields.io/badge/clients-5_Agent_clients-24292f.svg?style=flat-square" alt="five supported agent clients">
   <img src="https://img.shields.io/badge/skills-6-0ea5e9.svg?style=flat-square" alt="6 skills">
   <img src="https://img.shields.io/badge/status-actively_maintained-2ea44f.svg?style=flat-square" alt="actively maintained">
   <a href="README.en.md"><img src="https://img.shields.io/badge/language-English-2563eb.svg?style=flat-square" alt="English README"></a>
@@ -34,8 +34,8 @@
 | 项目 | 当前状态 |
 |---|---|
 | **维护状态** | **持续维护与迭代**；后续版本依据真实数据基准、跨端兼容性验证和用户反馈增量发布 |
-| **当前版本** | `v2.0.1`；2.0 为当前主线，1.0 分析脚本继续保持独立可用 |
-| **支持端** | Claude Code 插件与 Codex skills；两端共享同一组 `SKILL.md` 工作流契约 |
+| **当前版本** | `v2.0.2`；2.0 为当前主线，1.0 分析脚本继续保持独立可用 |
+| **支持端** | Claude Code 与 Codex 提供原生分发；OpenCode、OpenClaw 与 Hermes 按 Agent Skills 目录规约加载同一组 `SKILL.md` 工作流 |
 | **版本记录** | 语义化版本号、[`CHANGELOG.md`](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Jason-0409-G/vivarium/releases) |
 | **开发路线** | 14 个公开任务的输入、实现、产物、验收、依赖、风险与状态见 [`docs/VIVARIUM_V2_TASKS.zh-CN.md`](docs/VIVARIUM_V2_TASKS.zh-CN.md) |
 
@@ -84,7 +84,7 @@ skills/vivarium-report
 必须保留 `--ref master`，因为 `$skill-installer` 默认尝试 `main`。若新技能未立即出现在列表中，请重启 Codex。
 
 <details>
-<summary><strong>本地脚本安装（Claude Code、Codex 或同时安装）</strong></summary>
+<summary><strong>本地脚本安装（五个 Agent 客户端）</strong></summary>
 
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
@@ -92,6 +92,10 @@ cd vivarium
 bash install.sh --target claude   # 安装到 ~/.claude/skills/
 bash install.sh --target codex    # 安装到 $CODEX_HOME/skills
 bash install.sh --target both     # 同时安装到两端
+bash install.sh --target opencode # 安装到 ~/.config/opencode/skills
+bash install.sh --target openclaw # 安装到 ~/.openclaw/skills
+bash install.sh --target hermes   # 安装到 ~/.hermes/skills/vivarium
+bash install.sh --target all      # 同时安装到五个客户端
 ```
 
 安装脚本不会直接删除已有同名技能。旧目录会先重命名为带时间戳的备份，再写入新副本。
@@ -122,7 +126,7 @@ done
 |---|---|
 | **Claude Code 插件市场** | `/plugin marketplace update vivarium` → `/plugin update vivarium@vivarium` → `/reload-plugins` |
 | **Codex `$skill-installer`** | 按安装章节重新同步六个路径，并继续指定 `--ref master` |
-| **本地脚本副本** | `git pull` 后重新执行 `bash install.sh --target claude`、`codex` 或 `both` |
+| **本地脚本副本** | `git pull` 后重新执行对应的 `bash install.sh --target <client>`，或使用 `all` |
 | **Codex 符号链接** | 在链接指向的仓库中执行 `git pull` |
 
 Claude Code 可在 `/plugin` → Marketplaces 中为 `vivarium` 启用自动更新。当前会话仍显示旧版本时，请重新加载插件或重启相应客户端。
@@ -180,7 +184,7 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 - **已完成工作不会被覆盖。** 新记录只能追加；恢复时依据已有记录重建状态，并跳过已提交阶段。
 
 <details>
-<summary><strong>技术实现细节：durable loop、事件账本与 C-1 闸门</strong></summary>
+<summary><strong>技术实现细节：durable loop、仅追加事件日志与 C-1 闸门</strong></summary>
 
 内部执行顺序为 `PLAN → ROUTE → EXECUTE → VALIDATE → C-1 GATE → SEAL → RECOVER`。
 
@@ -194,9 +198,9 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 | **SEAL** | 规范化、摘要、同步并追加不可变事件 |
 | **RECOVER** | 重放已验证事件，对已提交阶段保持幂等 |
 
-事件对象采用受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL 账本。写入执行 fsync 定序，并隔离未完成的尾行。C-1 闸门要求四个证据对象均绑定到已提交的 run/cut/claim/contract；非零退出码、空产物或绑定不一致会在密封前终止提交。
+事件对象采用受限 RFC 8785/JCS 规范化 JSON、域分隔 SHA-256 摘要和仅追加 JSONL 事件日志。写入执行 fsync 定序，并隔离未完成的尾行。C-1 闸门要求四个证据对象均绑定到已提交的 run/cut/claim/contract；非零退出码、空产物或绑定不一致会在密封前终止提交。
 
-这里的“确定性恢复”特指**由同一账本按字节重建流程状态**，不表示不同操作系统、工具版本或硬件上的生物信息学计算必然产生位级一致结果。
+这里的“确定性恢复”特指**由同一事件日志按字节重建流程状态**，不表示不同操作系统、工具版本或硬件上的生物信息学计算必然产生位级一致结果。
 
 </details>
 
@@ -206,8 +210,8 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 
 | 维度 | 1.0 | 2.0 |
 |---|---|---|
-| 状态权威 | 可变 `run_manifest.json` | 仅追加、哈希链事件账本 |
-| 崩溃恢复 | 中断后需人工判断状态 | 自账本重放，对已提交阶段幂等 |
+| 状态权威 | 可变 `run_manifest.json` | 仅追加、哈希链事件日志 |
+| 崩溃恢复 | 中断后需人工判断状态 | 自事件日志重放，对已提交阶段幂等 |
 | 提交校验 | 无统一提交闸门 | C-1 四证据闸门 |
 | 编排 | 脚本串联 | 可驱动、可恢复的 DAG |
 | 资源路由 | 无 | 本地、集群脚本或外部 scaffold |
@@ -219,7 +223,7 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 内核的持久化机制有 token 与产物开销，只在超过某个门槛后才回本。据本仓库的多模型对抗基准，判据是**项目状态是否超出可携带的上下文**，而非阶段多少：
 
 - **单步 / 一次性 / 装得进上下文**（一次 ANI、一棵树、一张图，或短链）→ **直接调用对应子技能**，不驱动内核。最省，且无正确性损失——装得下时正确性与记忆一致性均已饱和（各档位均 1.0），内核只带来 token 开销（Opus / Sonnet / Haiku 分别约 +72% / +96% / +25%），甚至可能拖累最弱模型。
-- **长流程 / 状态超出单个上下文 / 崩溃敏感 / 需可审计提交链 / 上集群** → **驱动内核**（`plan`/`run`，`full`）。价值在此兑现：当项目状态超出可携带上下文，自管理状态坍塌（最早事实召回率 8%，即便最强模型），而账本对最弱模型仍保持 100%——记忆完整性是项目端属性，不在模型端。
+- **长流程 / 状态超出单个上下文 / 崩溃敏感 / 需可审计提交链 / 上集群** → **驱动内核**（`plan`/`run`，`full`）。价值在此兑现：当项目状态超出可携带上下文，自管理状态坍塌（最早事实召回率 8%，即便最强模型），而事件日志对最弱模型仍保持 100%——记忆完整性是项目端属性，不在模型端。
 
 ![记忆完整性 vs 项目规模的交叉点](docs/figures/benchmark_scale_crossover.png)
 
@@ -235,7 +239,7 @@ Snakemake 与 Nextflow 提供更成熟的静态 DAG、调度器集成和集群�
 
 | 技能 | 核心职责 | 执行边界 |
 |---|---|---|
-| **`vivarium`** | 目标解析、阶段图构建与子技能编排 | 完整流程默认由 2.0 事件账本承担状态权威 |
+| **`vivarium`** | 目标解析、阶段图构建与子技能编排 | 完整流程默认由 2.0 仅追加事件日志承担状态权威 |
 | **`vivarium-prep`** | 组装统计、质量评估与注释 | 轻量阶段就地执行；重计算阶段生成外部命令 |
 | **`vivarium-compare`** | ANI/AAI、直系同源与共线性 | FastANI、EzAAI、MUMmer 按依赖执行；OrthoFinder 默认外部运行 |
 | **`vivarium-phylo`** | 比对、修剪、建树与密码子选择分析 | 常规建树可就地执行；大规模分析与 PAML 可转为外部阶段 |
@@ -273,7 +277,7 @@ Snakemake 与 Nextflow 提供更成熟的静态 DAG、调度器集成和集群�
 
 两组在本次任务中均准确复述关键数值。差异在机制而非该次分数：基线依赖模型上下文，durable loop 从已密封产物读回。`correctness` 的 0.02 差异来自 fastANI minimizer jitter 未在报告中说明，属于报告完整性问题而非生物学判定错误。
 
-> 注（token 口径）：上表为**单跑**方向性数据。随后的三档位（Opus / Sonnet / Haiku）多模型对抗基准发现，durable loop 在**装得进上下文的小任务**上一致更贵（约 +72% / +96% / +25%），且正确性与记忆一致性对两条件均饱和；账本的收益只在项目状态**超出**可携带上下文时才出现（见上文「何时用内核」的 8% ↔ 100% 交叉点）。完整多模型复核与经对抗验证的硬保证见 [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md)。
+> 注（token 口径）：上表为**单跑**方向性数据。随后的三档位（Opus / Sonnet / Haiku）多模型对抗基准发现，durable loop 在**装得进上下文的小任务**上一致更贵（约 +72% / +96% / +25%），且正确性与记忆一致性对两条件均饱和；事件日志的收益只在项目状态**超出**可携带上下文时才出现（见上文「何时用内核」的 8% ↔ 100% 交叉点）。完整多模型复核与经对抗验证的硬保证见 [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md)。
 
 本次数据识别出一个同种配对：*S. vesiculosa* M7 与 PB002_L5，ANI 约 98.5%。评分提示中“无同种配对”的预期与 FASTA 标识及仓库既有分析不一致，证据见基准文档。
 
