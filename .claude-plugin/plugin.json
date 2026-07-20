@@ -1,7 +1,7 @@
 {
   "name": "vivarium",
-  "version": "1.0.0",
-  "description": "Local comparative-genomics analysis workflow: an umbrella orchestrator plus standalone modules for sequence search (BLAST/DIAMOND/HMMER), QC+assembly+annotation, orthology+ANI/AAI+synteny, alignment+tree+selection (dN/dS), and figures. Hybrid execution: light analyses run in the bio_tools conda env, heavy/long jobs are scaffolded as ready-to-run commands. Depends on no other skill.",
+  "version": "2.0.0",
+  "description": "Local comparative-genomics analysis workflow: an umbrella orchestrator plus standalone modules for sequence search (BLAST/DIAMOND/HMMER), QC+assembly+annotation, orthology+ANI/AAI+synteny, alignment+tree+selection (dN/dS), and figures. Since 2.0 a durable, crash-safe, event-sourced execution kernel drives the pipeline as a recoverable stage graph with a C-1 pre-commit gate and resource-aware local/cluster routing. Hybrid execution: light analyses run in the bio_tools conda env, heavy/long jobs are scaffolded as ready-to-run commands. Depends on no other skill.",
   "author": {
     "name": "Jason-0409-G"
   }
