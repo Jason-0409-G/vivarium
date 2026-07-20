@@ -52,27 +52,100 @@ V1_SCRIPTS = {
 REPORT_PY = _SKILLS / "vivarium-report" / "scripts" / "plot.py"
 INGEST_SCRIPT = _SKILLS / "vivarium" / "scripts" / "steps" / "ingest_outputs.py"
 
-# (subskill, action) -> declaration. mode 'inline' runs now if every tool is on
-# PATH; 'scaffold' always defers (heavy / long-running). tools=[] means a pure
-# script (no external bioinformatics binary).
+# (subskill, action) -> full declaration so callers need supply only flags.
+#   mode              'inline' (light, run now if tools present) | 'scaffold' (heavy)
+#   tools             external binaries; [] = pure script; PATH-probed
+#   positional_action script takes a positional action arg (default True; search=False)
+#   expected_outputs  workspace-relative GLOBS the step produces, with {flag} placeholders
+#                     resolved from the caller's flags (ingest verifies these; downstream reads)
+#   upstream          declarative (subskill, action) deps -> the planner wires DAG edges
+#   resource          recommended {cores, ram_gb} -> the device router decides local vs cluster
 ACTIONS: dict[tuple[str, str], dict] = {
-    ("prep", "stats"): {"mode": "inline", "tools": ["seqkit"]},
-    ("prep", "annotate"): {"mode": "scaffold", "tools": ["prokka"]},
-    ("compare", "ani"): {"mode": "inline", "tools": ["fastANI"]},
-    ("compare", "aai"): {"mode": "inline", "tools": ["EzAAI"]},
-    ("compare", "synteny"): {"mode": "inline", "tools": ["nucmer", "show-coords"]},
-    ("compare", "orthology"): {"mode": "scaffold", "tools": ["orthofinder"]},
-    ("phylo", "tree_fast"): {"mode": "inline", "tools": ["mafft", "trimal", "FastTree"]},
-    ("phylo", "tree"): {"mode": "inline", "tools": ["mafft", "trimal", "iqtree"]},
-    ("phylo", "selection"): {"mode": "scaffold", "tools": ["pal2nal.pl", "codeml"]},
+    ("prep", "stats"): {
+        "mode": "inline", "tools": ["seqkit"],
+        "expected_outputs": ["{out}"], "upstream": [],
+        "resource": {"cores": 1, "ram_gb": 1},
+    },
+    ("prep", "annotate"): {
+        "mode": "scaffold", "tools": ["prokka"],
+        "expected_outputs": ["{out}/*.gff", "{out}/*.faa", "{out}/*.ffn"], "upstream": [],
+        "resource": {"cores": 4, "ram_gb": 4},
+    },
+    ("prep", "completeness"): {
+        "mode": "scaffold", "tools": ["checkm2"],
+        "expected_outputs": ["checkm2_out/quality_report.tsv"], "upstream": [],
+        "resource": {"cores": 8, "ram_gb": 16},
+    },
+    ("prep", "eggnog"): {
+        "mode": "scaffold", "tools": ["emapper.py"],
+        "expected_outputs": ["eggnog_out/*.emapper.annotations"],
+        "upstream": [("prep", "annotate")], "resource": {"cores": 8, "ram_gb": 16},
+    },
+    ("prep", "dbcan"): {
+        "mode": "scaffold", "tools": ["run_dbcan"],
+        "expected_outputs": ["dbcan_out/overview.txt"],
+        "upstream": [("prep", "annotate")], "resource": {"cores": 8, "ram_gb": 16},
+    },
+    ("prep", "flye"): {
+        "mode": "scaffold", "tools": ["flye"],
+        "expected_outputs": ["flye_out/assembly.fasta"], "upstream": [],
+        "resource": {"cores": 16, "ram_gb": 32},
+    },
+    ("compare", "ani"): {
+        "mode": "inline", "tools": ["fastANI"],
+        "expected_outputs": ["{out}"], "upstream": [("prep", "stats")],
+        "resource": {"cores": 4, "ram_gb": 2},
+    },
+    ("compare", "aai"): {
+        "mode": "inline", "tools": ["EzAAI"],
+        "expected_outputs": ["{out}"], "upstream": [("prep", "stats")],
+        "resource": {"cores": 4, "ram_gb": 4},
+    },
+    ("compare", "synteny"): {
+        "mode": "inline", "tools": ["nucmer", "show-coords"],
+        "expected_outputs": ["{out}"], "upstream": [],
+        "resource": {"cores": 1, "ram_gb": 2},
+    },
+    ("compare", "orthology"): {
+        "mode": "scaffold", "tools": ["orthofinder"],
+        "expected_outputs": [
+            "OrthoFinder/Results_*/Orthogroups/Orthogroups.tsv",
+            "OrthoFinder/Results_*/Orthogroups/Orthogroups.GeneCount.tsv",
+        ],
+        "upstream": [("prep", "annotate")], "resource": {"cores": 8, "ram_gb": 16},
+    },
+    ("phylo", "tree_fast"): {
+        "mode": "inline", "tools": ["mafft", "trimal", "FastTree"],
+        "expected_outputs": ["{out}.treefile"], "upstream": [("compare", "orthology")],
+        "resource": {"cores": 2, "ram_gb": 4},
+    },
+    ("phylo", "tree"): {
+        "mode": "inline", "tools": ["mafft", "trimal", "iqtree"],
+        "expected_outputs": ["{out}.treefile"], "upstream": [("compare", "orthology")],
+        "resource": {"cores": 4, "ram_gb": 8},
+    },
+    ("phylo", "selection"): {
+        "mode": "scaffold", "tools": ["pal2nal.pl", "codeml"],
+        "expected_outputs": ["codeml_output/out.txt"],
+        "upstream": [("phylo", "tree"), ("prep", "annotate")],
+        "resource": {"cores": 2, "ram_gb": 4},
+    },
     # vivarium_search.sh takes its flags directly, with no positional action arg.
     ("search", "sequence_search"): {
-        "mode": "inline",
-        "tools": ["blastp", "makeblastdb"],
-        "positional_action": False,
+        "mode": "inline", "tools": ["blastp", "makeblastdb"], "positional_action": False,
+        "expected_outputs": ["{out}"], "upstream": [],
+        "resource": {"cores": 4, "ram_gb": 4},
     },
-    ("report", "heatmap"): {"mode": "inline", "tools": []},
-    ("report", "bars"): {"mode": "inline", "tools": []},
+    ("report", "heatmap"): {
+        "mode": "inline", "tools": [],
+        "expected_outputs": ["{out}.svg", "{out}.pdf"],
+        "upstream": [("compare", "ani")], "resource": {"cores": 1, "ram_gb": 1},
+    },
+    ("report", "bars"): {
+        "mode": "inline", "tools": [],
+        "expected_outputs": ["{out}.svg", "{out}.pdf"],
+        "upstream": [], "resource": {"cores": 1, "ram_gb": 1},
+    },
 }
 
 
@@ -181,11 +254,31 @@ def v1_stage_workspace(
     )
 
 
+def _render(template: str, flags: Mapping[str, object]) -> str:
+    rendered = template
+    for key, value in flags.items():
+        if value is None or value is True:
+            continue
+        rendered = rendered.replace("{" + str(key).lstrip("-") + "}", str(value))
+    return rendered
+
+
+def action_outputs(subskill: str, action: str, flags: Mapping[str, object]) -> list[str]:
+    """The workspace-relative output globs an action produces, resolved from flags."""
+    spec = ACTIONS.get((subskill, action))
+    if spec is None:
+        raise KeyError(f"unknown V1 action: {subskill}:{action}")
+    return [_render(glob, flags) for glob in spec.get("expected_outputs", [])]
+
+
 def ingest_v1_step(
     store,
     *,
     run_id: str,
-    expected_outputs: Sequence[str],
+    subskill: str | None = None,
+    action: str | None = None,
+    flags: Mapping[str, object] | None = None,
+    expected_outputs: Sequence[str] | None = None,
     dependencies: Sequence[DependencyHead] = (),
     stage_id: str = "stage-1",
     attempt_id: str = "attempt-1",
@@ -193,9 +286,17 @@ def ingest_v1_step(
     """Commit a scaffolded stage. The user has already run the heavy/uninstalled
     tool and placed its outputs in v1_stage_workspace(...); this runs a
     deterministic ingest process that verifies those outputs are present and
-    non-empty, then seals them as the stage's durable evidence."""
+    non-empty, then seals them as the stage's durable evidence. The expected
+    outputs come from the ACTIONS table (given subskill+action+flags) or may be
+    passed directly."""
+    if expected_outputs is None:
+        if subskill is None or action is None:
+            raise ValueError(
+                "ingest_v1_step needs expected_outputs, or subskill+action(+flags)"
+            )
+        expected_outputs = action_outputs(subskill, action, flags or {})
     if not expected_outputs:
-        raise ValueError("ingest_v1_step requires the expected output names")
+        raise ValueError("no expected outputs to ingest")
     argv = [sys.executable, str(INGEST_SCRIPT), *expected_outputs]
     return perform_one_step(
         store,
@@ -210,6 +311,7 @@ def ingest_v1_step(
 __all__ = [
     "run_v1_step",
     "ingest_v1_step",
+    "action_outputs",
     "v1_stage_workspace",
     "v1_step_argv",
     "missing_tools",

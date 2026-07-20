@@ -20,16 +20,21 @@ import sys
 from pathlib import Path
 
 
+def _satisfied(pattern: str) -> bool:
+    if any(ch in pattern for ch in "*?["):
+        return any(
+            p.is_file() and p.stat().st_size > 0 for p in Path(".").glob(pattern)
+        )
+    path = Path(pattern)
+    return path.is_file() and path.stat().st_size > 0
+
+
 def main(argv: list[str]) -> int:
     expected = argv[1:]
     if not expected:
         sys.stderr.write("ingest_outputs: no expected outputs given\n")
         return 2
-    missing = []
-    for name in expected:
-        path = Path(name)
-        if not path.is_file() or path.stat().st_size == 0:
-            missing.append(name)
+    missing = [pattern for pattern in expected if not _satisfied(pattern)]
     if missing:
         sys.stderr.write(
             "ingest_outputs: missing or empty expected outputs: "
