@@ -1,20 +1,19 @@
 ---
 name: vivarium
 description: >-
-  Orchestrate a full local comparative-genomics workflow over a set of genomes: plan the analysis as a stage graph, run
-  the steps in order through the vivarium sub-skills (prep, compare, phylo, search, report), track everything in a run
-  manifest, and pause-and-resume at the heavy steps. Use whenever the user wants an end-to-end comparative-genomics
-  analysis rather than a single step — "compare these genomes and make figures", "run the whole pipeline on this genome
-  set", "characterize these strains", "build me a phylogeny and find the unique genes", "比较这些基因组并出图", "把这套
-  基因组从头分析一遍", "跑完整比较基因组流程", "vivarium". For a single isolated step (just BLAST / just a heatmap / just
-  ANI) defer to the specific sub-skill instead. Light steps run locally in bio_tools; heavy steps are scaffolded.
+  Orchestrate an end-to-end comparative-genomics workflow over a genome set. Use for multi-stage or complete analyses
+  such as "run the whole pipeline", "characterize these strains", "compare these genomes and make figures", "跑完整比较
+  基因组流程", or requests naming vivarium 2.0, durable execution, the event ledger, crash recovery, or the full goal.
+  Default new end-to-end work to the 2.0 durable plan/run engine; use the 1.0 mutable-manifest orchestrator only when the
+  user explicitly requests legacy V1 behavior. For one isolated ANI, BLAST, tree, or figure, defer to the corresponding
+  vivarium sub-skill.
 ---
 
-# vivarium — comparative-genomics workflow orchestrator
+# vivarium — durable comparative-genomics orchestrator
 
-Plan and run a multi-step comparative-genomics analysis as a stage graph (DAG), keeping a single run manifest as the source of truth. Light stages run now; heavy stages (assembly, eggNOG/dbCAN, OrthoFinder, big trees, PAML) are scaffolded — you hand the user the command, they run it, you resume from the manifest.
+Coordinate multi-stage comparative-genomics analyses. For new end-to-end work, use the 2.0 event-sourced engine so the append-only ledger is the source of state authority. Run eligible stages locally; pause at scaffold or cluster stages and resume from the same ledger after outputs return.
 
-This skill **coordinates**; the actual work lives in the sub-skills. Read the relevant sub-skill's SKILL.md before running its stage.
+This skill coordinates; analysis implementations live in the sub-skills. Read the relevant sub-skill before executing its stage.
 
 | Sub-skill | Does |
 |---|---|
@@ -22,49 +21,66 @@ This skill **coordinates**; the actual work lives in the sub-skills. Read the re
 | `vivarium-compare` | ANI/AAI, orthology (OrthoFinder), synteny (MUMmer) |
 | `vivarium-phylo` | alignment → trim → tree (IQ-TREE), selection (PAML dN/dS) |
 | `vivarium-search` | BLAST/DIAMOND/HMMER sequence search |
-| `vivarium-report` | publication-grade figures + tables (Python/R) |
+| `vivarium-report` | standardized manuscript figures and tables (Python/R) |
 
-## Step 1 — read the goal, plan the DAG
+## Select the execution mode
 
-Map the user's goal to a stage graph. Common goals (the bundled `orchestrate.py` knows these):
+- Use **V2 durable mode by default** for new complete workflows, or whenever the request mentions `2.0`, `durable`, `event ledger`, `crash recovery`, `C-1`, or `full`.
+- Use **V1 legacy mode only on explicit request**. Its `run_manifest.json` is a V1 coordination record, never the source of authority for a V2 run.
+- Do not silently mix V1 and V2 state within one run.
+
+## Map the goal
+
+Map the request to one of the V2 goals:
 
 - **compare-genomes** → prep:stats → compare:ani → compare:aai → report:heatmap
 - **phylogeny** → prep:annotate(per genome) → compare:orthology(single-copy core) → phylo:tree → report
-- **selection** → (orthogroup of interest) → phylo:tree → phylo:dnds(scaffold)
+- **selection** → phylo:tree → phylo:selection(scaffold)
 - **full** → prep(stats+annotate) → compare(ani+aai+orthology+synteny) → phylo:tree → report
 
-State the plan to the user before running, and note which stages are light (run now) vs heavy (scaffold).
+Interpret “complete/full vivarium” as the **full** goal unless the user narrows the scope. The bundled full goal is the default genome-set workflow; it does not invent the query inputs required for arbitrary sequence searches or the orthogroup/codon inputs required for selection analysis. Add those only when the user supplies the required inputs or explicitly requests them.
 
-## Step 2 — set up the run workspace + manifest
+## Plan before execution
+
+From the repository root, print the device probe, routes, commands, dependencies, and expected artifacts:
 
 ```bash
-python3 <skill-dir>/scripts/orchestrate.py init --goal <goal> --indir <genomes_dir> --workdir <dir>
-#   prints the planned stage table and writes <workdir>/vivarium_run_<goal>/run_manifest.json
-#   (refuses to overwrite an existing run — use --note <tag> for a new run, or --force to back-up-and-replace)
-python3 <skill-dir>/scripts/orchestrate.py status --manifest <run_manifest.json>   # show progress any time
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    plan --root <store_dir> --goal <goal> --genomes <genomes_dir>
 ```
-The manifest records, per stage: the sub-skill, the action, status (`planned` → `done`/`scaffolded`/`failed`), inputs, outputs, the exact command, the tool version, and any QC gate. It is the single source of truth for the run **and** the methods section — every number traces back to it. **Write each finished stage back into it** so it stays the truth:
+
+Before running, summarize the ordered stages and identify `local_inline`, `cluster`, and `scaffold_local` boundaries. Never auto-install missing tools or auto-submit cluster jobs.
+
+## Drive and resume the durable run
+
 ```bash
-python3 <skill-dir>/scripts/orchestrate.py update --manifest <run_manifest.json> --stage <N> \
-    --status done --command "<exact command>" --version "<tool version>" --outputs <files...>
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    run --root <store_dir> --goal <goal> --genomes <genomes_dir>
 ```
 
-## Step 3 — execute the DAG, stage by stage
+Use `--goal full` for the complete default genome-set workflow. Re-run the same command after externally executed outputs are placed in the reported workspace; recovery must continue from the ledger without rerunning committed stages.
 
-For each stage in order:
-1. Read the relevant sub-skill and run its bundled step (light) or generate its scaffold command (heavy).
-2. Record the result into the manifest (command, version, outputs, status). For a light stage that's `done`; for a heavy stage hand the user the command and mark `scaffolded`.
-3. **Pause at scaffolded stages**: stop, give the user the command, and resume from the manifest when they say it's finished (ingest the outputs, mark `done`, continue downstream).
-4. Honor data flow: a stage reads its inputs from the prior stages' manifest outputs (e.g. compare:orthology consumes prep:annotate's `.faa`; report:heatmap consumes compare:ani's matrix).
+For every stage:
 
-Don't silently run a heavy stage because it's "next" — assembly, OrthoFinder, eggNOG, big trees and PAML can run for a long time; scaffolding keeps the user in control.
+1. Preserve the planned dependency order and workspace.
+2. Execute only stages routed `local_inline`.
+3. At `cluster` or `scaffold_local`, stop and return the exact command, expected outputs, and destination workspace.
+4. Admit outputs downstream only after validation and the C-1 evidence gate complete.
+5. Build final claims and methods from committed artifacts and recorded provenance, not model memory.
 
-## Step 4 — close with the report + methods
+## Legacy V1 mode
 
-Finish with `vivarium-report` for the figures and a methods paragraph built from the manifest (every tool + version + command). The story the figures tell must match what the numbers support — don't let the report overclaim past the analysis.
+Only when the user explicitly requests V1 or legacy manifest behavior, use:
+
+```bash
+python3 <skill-dir>/scripts/orchestrate.py init \
+    --goal <goal> --indir <genomes_dir> --workdir <dir>
+```
+
+Keep V1 outputs independently usable, but do not describe its mutable manifest as authoritative for a V2 run.
 
 ## House rules (shared across vivarium)
 
 - **Never auto-install** tools or databases; surface what's missing and let the user decide.
-- Don't `rm` run workspaces or intermediates; move to the project's `_deleted/` if cleanup is needed.
-- Keep interpretation tied to evidence; a workflow that produces a figure has not proven a mechanism. n=1 is not a basin-scale claim.
+- Do not permanently delete run workspaces or intermediates; use the repository's recoverable deletion policy.
+- Keep interpretation tied to committed evidence; a generated figure alone does not establish a mechanism.

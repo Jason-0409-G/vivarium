@@ -23,7 +23,7 @@ LLM-driven comparative-genomics analysis has two silent failure modes. First, a 
 | Item | Current status |
 |---|---|
 | **Maintenance** | **Actively maintained and iterated**; subsequent versions will be released incrementally in response to real-data benchmarks, cross-client compatibility testing, and user feedback |
-| **Current release line** | `v2.0.0`; 2.0 is the main development line, while the 1.0 analysis scripts remain independently usable |
+| **Current release line** | `v2.0.1`; 2.0 is the main development line, while the 1.0 analysis scripts remain independently usable |
 | **Supported clients** | Claude Code plugin and Codex skills; both clients share the same `SKILL.md` workflow contracts |
 | **Version record** | Semantic versioning, [`CHANGELOG.md`](CHANGELOG.md), and [GitHub Releases](https://github.com/Jason-0409-G/vivarium/releases) |
 | **Development roadmap** | Public tasks, acceptance criteria, dependencies, risks, and phase status are documented in [`docs/VIVARIUM_V2_TASKS.zh-CN.md`](docs/VIVARIUM_V2_TASKS.zh-CN.md) |
@@ -136,6 +136,40 @@ git pull
 ```
 
 Codex normally detects changed skill files automatically. Restart Codex if the active session continues to expose the previous version. Independent copies installed through `$skill-installer` should be synchronized again from the same six repository paths with `--ref master` specified explicitly; for continuous repository tracking, prefer the local-clone-and-symlink method.
+
+## Triggering the complete workflow
+
+The “complete workflow” means invoking the umbrella `vivarium` skill to drive the **`full` goal of the 2.0 durable kernel**. Both clients can also infer the skill from natural-language requests such as “run the complete comparative-genomics workflow” or “analyze these genomes end to end and make figures”; use the explicit invocation below to prevent routing to a single-step sub-skill.
+
+| **Claude Code** | **Codex** |
+|---|---|
+| Use the plugin namespace `/vivarium:vivarium` | Use `$vivarium` |
+
+**Claude Code**
+
+```text
+/vivarium:vivarium Run the complete vivarium 2.0 durable workflow over ./genomes. Use the full goal, print the DAG and local/cluster routing before execution, persist state under ./vivarium_store, run eligible local stages, and pause at cluster or scaffold stages with the exact command, expected artifacts, and collection path.
+```
+
+**Codex**
+
+```text
+Use $vivarium to run the full vivarium 2.0 durable workflow over ./genomes. Use the full goal, print the DAG and local/cluster routing before execution, persist state under ./vivarium_store, run eligible local stages, and pause at cluster or scaffold stages with the exact command, expected artifacts, and collection path.
+```
+
+The same kernel can be driven directly from the repository root:
+
+```bash
+# Review the complete stage graph, resource routing, commands, and artifacts first
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    plan --root ./vivarium_store --goal full --genomes ./genomes
+
+# Execute; repeat the same command after collecting external-stage artifacts to resume from the ledger
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    run --root ./vivarium_store --goal full --genomes ./genomes
+```
+
+The current `full` goal expands to assembly statistics → annotation → ANI → AAI → orthology → synteny → phylogenetic tree → heatmap. Sequence searches and PAML selection analyses require additional query, database, orthogroup, or codon-alignment inputs, so complete mode does not invent them when those inputs are absent; invoke the corresponding sub-skill or the `selection` goal explicitly after the primary workflow.
 
 ## Why use vivarium (rather than just running scripts)
 
@@ -277,7 +311,7 @@ To evaluate the central 2.0 mechanism—the event ledger as the authoritative ca
 
 ## Trigger contract
 
-Each of the six skills provides an `evals/trigger_evals.json` file, together comprising **67** should-trigger and should-not-trigger queries (12 + 11 + 11 + 12 + 11 + 10). These files define the trigger contract and serve as regression fixtures after description changes; their structure follows the `skill-creator` eval-set schema. An additional set of 20 boundary-routing queries assessed discrimination among neighboring skills, covering reprocessing of existing results, whole-pipeline versus single-step requests, ambiguous adjacent-skill cases, and negative inputs that should activate no skill. Manual review of the current version yielded **20/20** agreement with the expected route. This measure evaluates trigger-rule consistency only; it does not assess the scientific correctness of downstream analyses.
+Each of the six skills provides an `evals/trigger_evals.json` file, together comprising **69** should-trigger and should-not-trigger queries (12 + 11 + 12 + 11 + 11 + 12 for vivarium / prep / compare / phylo / search / report, respectively). These files define the trigger contract and serve as regression fixtures after description changes; their structure follows the `skill-creator` eval-set schema. An additional set of 20 boundary-routing queries assessed discrimination among neighboring skills, covering reprocessing of existing results, whole-pipeline versus single-step requests, ambiguous adjacent-skill cases, and negative inputs that should activate no skill. Manual review of the current version yielded **20/20** agreement with the expected route. This measure evaluates trigger-rule consistency only; it does not assess the scientific correctness of downstream analyses.
 
 ## Dependencies
 

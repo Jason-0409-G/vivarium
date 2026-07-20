@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vivarium Full Workflow"
+  short_description: "Durable end-to-end comparative genomics workflow"
+  default_prompt: "Use $vivarium to run the full durable comparative-genomics workflow over my genome directory."

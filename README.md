@@ -23,7 +23,7 @@ LLM 驱动的比较基因组学分析有两处静默失效。其一，流程跑�
 | 项目 | 当前状态 |
 |---|---|
 | **维护状态** | **持续维护与迭代**；后续版本将依据真实数据基准、跨端兼容性验证和用户反馈增量发布 |
-| **当前版本线** | `v2.0.0`；2.0 为当前主线，1.0 分析脚本继续保持独立可用 |
+| **当前版本线** | `v2.0.1`；2.0 为当前主线，1.0 分析脚本继续保持独立可用 |
 | **支持端** | Claude Code 插件与 Codex skills；两端共享同一组 `SKILL.md` 工作流契约 |
 | **版本记录** | 语义化版本号、[`CHANGELOG.md`](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Jason-0409-G/vivarium/releases) |
 | **开发路线** | 公开任务、验收标准、依赖、风险和阶段状态见 [`docs/VIVARIUM_V2_TASKS.zh-CN.md`](docs/VIVARIUM_V2_TASKS.zh-CN.md) |
@@ -136,6 +136,40 @@ git pull
 ```
 
 Codex 通常会自动检测技能文件变化；若当前会话仍显示旧版本，请重启 Codex。通过 `$skill-installer` 安装的独立副本应按相同的六个技能路径并显式指定 `--ref master` 重新同步；需要持续跟踪仓库更新时，建议使用本地克隆与符号链接方式。
+
+## 触发完整流程
+
+“完整流程”指由伞型 `vivarium` 技能驱动 **2.0 持久化内核的 `full` 目标**。两端也能从“跑完整比较基因组流程”“从头分析这些基因组并出图”等自然语言自动触发；为避免被路由到单步子技能，建议显式调用：
+
+| **Claude Code** | **Codex** |
+|---|---|
+| 使用插件命名空间 `/vivarium:vivarium` | 使用 `$vivarium` |
+
+**Claude Code**
+
+```text
+/vivarium:vivarium 请对 ./genomes 运行 vivarium 2.0 完整持久化流程：使用 full 目标，先输出 DAG 与本地/集群路由，再驱动可就地阶段；将持久化状态写入 ./vivarium_store。遇到 cluster 或 scaffold 阶段时暂停，并返回确切命令、预期产物与回收位置。
+```
+
+**Codex**
+
+```text
+Use $vivarium to run the full vivarium 2.0 durable workflow over ./genomes. Use the full goal, print the DAG and local/cluster routing before execution, persist state under ./vivarium_store, run eligible local stages, and pause at cluster or scaffold stages with the exact command, expected artifacts, and collection path.
+```
+
+也可从仓库根目录直接驱动同一内核：
+
+```bash
+# 先审阅完整阶段图、资源路由、命令与预期产物
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    plan --root ./vivarium_store --goal full --genomes ./genomes
+
+# 执行；在外部阶段暂停，回收产物后重复同一命令即可自账本续跑
+PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
+    run --root ./vivarium_store --goal full --genomes ./genomes
+```
+
+当前 `full` 目标展开为：组装统计 → 注释 → ANI → AAI → 直系同源 → 共线性 → 系统发育树 → 热图。序列搜索与 PAML 选择分析需要额外的查询序列、数据库或密码子比对输入，因此不会在缺少输入时被“完整模式”擅自加入；可在主流程后显式调用相应子技能或 `selection` 目标。
 
 ## 为什么用 vivarium（而不是直接跑脚本）
 
@@ -277,7 +311,7 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 
 ## 触发契约
 
-六个技能分别提供 `evals/trigger_evals.json`，合计包含 **67 条** should-trigger / should-not-trigger 查询（12 + 11 + 11 + 12 + 11 + 10）。这些文件定义技能的触发契约，并作为描述变更后的回归检查集；其结构遵循 `skill-creator` 的 eval-set schema。另以 20 条边界路由查询检验技能间的判别性，覆盖既有结果的再处理、完整流程与单步请求、相邻技能歧义以及不应触发任何技能的负样本。当前版本经人工复核的路由一致率为 **20/20**。该指标仅评价触发规则与预期路由的一致性，不评价下游分析的科学正确性。
+六个技能分别提供 `evals/trigger_evals.json`，合计包含 **69 条** should-trigger / should-not-trigger 查询（12 + 11 + 12 + 11 + 11 + 12，依次对应 vivarium / prep / compare / phylo / search / report）。这些文件定义技能的触发契约，并作为描述变更后的回归检查集；其结构遵循 `skill-creator` 的 eval-set schema。另以 20 条边界路由查询检验技能间的判别性，覆盖既有结果的再处理、完整流程与单步请求、相邻技能歧义以及不应触发任何技能的负样本。当前版本经人工复核的路由一致率为 **20/20**。该指标仅评价触发规则与预期路由的一致性，不评价下游分析的科学正确性。
 
 ## 依赖
 

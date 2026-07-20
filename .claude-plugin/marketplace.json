@@ -1,14 +1,14 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "vivarium",
-  "description": "Local comparative-genomics analysis skills.",
+  "description": "Durable comparative-genomics workflow skills for Claude Code.",
   "owner": {
     "name": "Jason-0409-G"
   },
   "plugins": [
     {
       "name": "vivarium",
-      "description": "Local comparative-genomics analysis workflow: an umbrella orchestrator plus standalone modules for sequence search (BLAST/DIAMOND/HMMER), QC+assembly+annotation, orthology+ANI/AAI+synteny, alignment+tree+selection (dN/dS), and figures. Hybrid execution: light analyses run in the bio_tools conda env, heavy/long jobs are scaffolded as ready-to-run commands. Depends on no other skill.",
+      "description": "Comparative-genomics workflow with an umbrella orchestrator and five standalone modules. New end-to-end requests default to the durable V2 event-ledger engine; eligible stages run locally, while heavy or specialized stages pause with auditable external commands.",
       "author": {
         "name": "Jason-0409-G"
       },

@@ -2,6 +2,15 @@
 
 本插件遵循[语义化版本](https://semver.org/lang/zh-CN/)（`MAJOR.MINOR.PATCH`），版本号写在 `.claude-plugin/plugin.json` 的 `version`。**用户只在版本号 bump 时收到更新**；更新方式见 [README「更新」一节](README.md#更新)。
 
+## [2.0.1] - 2026-07-20
+
+### 变更
+- 伞型 `vivarium` 技能将新的端到端请求默认路由到 V2 持久化内核；仅在用户明确要求 V1/legacy 时使用可变 manifest 编排器。
+- 新增 Claude Code `/vivarium:vivarium` 与 Codex `$vivarium` 的完整模式触发示例，并提供 `--goal full` 的直接 CLI 入口。
+- 为 V2 durable / event-ledger / C-1 完整模式补充伞型技能触发回归样本。
+- 明确 `full` 是默认的完整基因组集合流程，不会在缺少查询序列、数据库、orthogroup 或密码子比对时擅自加入搜索与选择分析。
+- 新增 Codex 技能界面元数据，默认提示指向 `full` durable workflow。
+
 ## [2.0.0] - 2026-07-20
 
 **持久化执行内核。** 1.0 以可变 JSON 清单（`run_manifest.json`）记录流程状态；2.0 将执行层替换为一套持久化、崩溃安全、事件溯源的内核，把比较基因组学流程建模为可确定性恢复的阶段图。1.0 全部分析脚本保持独立可用，2.0 通过通用适配器将其作为持久化阶段驱动，默认行为不变。

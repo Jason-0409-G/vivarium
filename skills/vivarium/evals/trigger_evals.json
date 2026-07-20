@@ -20,6 +20,14 @@
     "should_trigger": true
   },
   {
+    "query": "Use vivarium 2.0 to run the full durable pipeline and recover the workflow from its event ledger if interrupted.",
+    "should_trigger": true
+  },
+  {
+    "query": "请用 vivarium 的 full 目标运行完整流程，所有阶段通过 C-1 闸门后写入事件账本。",
+    "should_trigger": true
+  },
+  {
     "query": "Just compute the ANI between these two strains.",
     "should_trigger": false
   },
