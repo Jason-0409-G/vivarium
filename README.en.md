@@ -57,7 +57,7 @@ For source inspection or a pinned local checkout, clone the repository and run t
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
 cd vivarium
-bash install.sh            # copies skills/ into ~/.claude/skills/
+bash install.sh --target claude   # copies all six skills into ~/.claude/skills/
 ```
 
 ### Codex
@@ -82,7 +82,17 @@ skills/vivarium-report
 
 Newly installed skills are normally available on the next task. Restart Codex if the skill list does not refresh.
 
-**Option 2 · Local clone with user-level symlinks**
+**Option 2 · Script (local copy)**
+
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh --target codex    # copies into $CODEX_HOME/skills (default: ~/.codex/skills)
+```
+
+Existing skills are not deleted in place. The installer first renames each existing directory to a timestamped backup and then writes the new copy.
+
+**Option 3 · Local clone with user-level symlinks**
 
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
@@ -121,12 +131,20 @@ A script-based installation does not synchronize the repository automatically. U
 ```bash
 cd vivarium   # the previously cloned directory
 git pull
-bash install.sh
+bash install.sh --target claude
 ```
 
 ### Codex
 
-For a local clone with symlinked skills, the link targets remain stable; update the source checkout directly:
+A script-installed Codex copy must be reinstalled after updating the source checkout:
+
+```bash
+cd vivarium
+git pull
+bash install.sh --target codex
+```
+
+For symlinked skills, the link targets remain stable; update the source checkout directly:
 
 ```bash
 cd vivarium

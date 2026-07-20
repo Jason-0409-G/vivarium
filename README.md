@@ -57,7 +57,7 @@ Claude Code 与 Codex 是 vivarium 的两个**平级支持端**，提供相同�
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
 cd vivarium
-bash install.sh            # 将 skills/ 拷入 ~/.claude/skills/
+bash install.sh --target claude   # 将六项技能拷入 ~/.claude/skills/
 ```
 
 ### Codex
@@ -82,7 +82,17 @@ skills/vivarium-report
 
 新安装的技能通常在下一轮任务中自动可用；若技能列表未刷新，请重启 Codex。
 
-**方式二 · 本地克隆并建立用户级符号链接**
+**方式二 · 脚本（本地副本）**
+
+```bash
+git clone https://github.com/Jason-0409-G/vivarium.git
+cd vivarium
+bash install.sh --target codex    # 拷入 $CODEX_HOME/skills（默认 ~/.codex/skills）
+```
+
+已有同名技能不会被直接删除；安装脚本先将旧目录重命名为带时间戳的备份，再写入新副本。
+
+**方式三 · 本地克隆并建立用户级符号链接**
 
 ```bash
 git clone https://github.com/Jason-0409-G/vivarium.git
@@ -121,12 +131,20 @@ Claude Code 与 Codex 对应同一套工作流契约和版本内容；下列步�
 ```bash
 cd vivarium   # 先前克隆的目录
 git pull
-bash install.sh
+bash install.sh --target claude
 ```
 
 ### Codex
 
-采用本地克隆与符号链接安装时，链接目标保持不变，只需更新源码：
+采用脚本安装的 Codex 本地副本需在拉取源码后重新安装：
+
+```bash
+cd vivarium
+git pull
+bash install.sh --target codex
+```
+
+采用符号链接安装时，链接目标保持不变，只需更新源码：
 
 ```bash
 cd vivarium

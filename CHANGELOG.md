@@ -10,6 +10,7 @@
 - 为 V2 durable / event-ledger / C-1 完整模式补充伞型技能触发回归样本。
 - 明确 `full` 是默认的完整基因组集合流程，不会在缺少查询序列、数据库、orthogroup 或密码子比对时擅自加入搜索与选择分析。
 - 新增 Codex 技能界面元数据，默认提示指向 `full` durable workflow。
+- `install.sh` 新增 `--target claude|codex|both`，为 Claude Code 与 Codex 提供平级的本地安装入口，并在覆盖前保留时间戳备份。
 
 ## [2.0.0] - 2026-07-20
 
