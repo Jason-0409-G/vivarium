@@ -166,6 +166,137 @@
     });
   });
 
+  // On-site skill detail modal (no GitHub bounce).
+  const skillModal = document.getElementById("skill-modal");
+  if (skillModal && window.VIVARIUM_SKILLS) {
+    const el = (id) => document.getElementById(id);
+    const codeEl = el("skill-modal-code"), nameEl = el("skill-modal-name"),
+      roleEl = el("skill-modal-role"), sumEl = el("skill-modal-summary"),
+      capsEl = el("skill-modal-caps"), toolsEl = el("skill-modal-tools"),
+      boundsEl = el("skill-modal-bounds"), exWrap = el("skill-modal-example-wrap"),
+      exEl = el("skill-modal-example");
+    let openCode = null;
+
+    function renderSkill(code) {
+      const s = window.VIVARIUM_SKILLS[code];
+      if (!s) return;
+      openCode = code;
+      codeEl.textContent = s.code;
+      nameEl.textContent = s.name;
+      roleEl.textContent = language === "zh" ? s.role_zh : s.role_en;
+      sumEl.textContent = language === "zh" ? s.summary_zh : s.summary_en;
+      const fill = (container, items, pick) => {
+        container.textContent = "";
+        (items || []).forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = pick(item);
+          container.appendChild(li);
+        });
+      };
+      fill(capsEl, s.capabilities, (c) => (language === "zh" ? c.zh : c.en));
+      fill(boundsEl, s.boundaries, (b) => (language === "zh" ? b.zh : b.en));
+      toolsEl.textContent = "";
+      (s.tools || []).forEach((t) => {
+        const chip = document.createElement("span");
+        chip.className = "skill-chip";
+        chip.textContent = t;
+        toolsEl.appendChild(chip);
+      });
+      const ex = language === "zh" ? s.example_zh : s.example_en;
+      exEl.textContent = ex || "";
+      exWrap.hidden = !ex;
+    }
+
+    function openSkill(code) {
+      renderSkill(code);
+      skillModal.hidden = false;
+      requestAnimationFrame(() => skillModal.classList.add("open"));
+      document.body.classList.add("menu-open");
+      skillModal.querySelector(".skill-modal-close")?.focus();
+    }
+
+    function closeSkill() {
+      skillModal.classList.remove("open");
+      document.body.classList.remove("menu-open");
+      openCode = null;
+      window.setTimeout(() => { skillModal.hidden = true; }, 200);
+    }
+
+    document.querySelectorAll(".skill-card[data-skill]").forEach((card) => {
+      card.addEventListener("click", () => openSkill(card.dataset.skill));
+    });
+    skillModal.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeSkill));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !skillModal.hidden) closeSkill();
+    });
+    languageButton?.addEventListener("click", () => { if (openCode) renderSkill(openCode); });
+  }
+
+  // Interactive drift chart: recall fidelity vs accumulated project state.
+  const driftChart = document.querySelector(".drift-chart");
+  if (driftChart) {
+    const svg = driftChart.querySelector("svg");
+    const SVGNS = "http://www.w3.org/2000/svg";
+    const X0 = 72, X1 = 604, Y_TOP = 40, Y_BOT = 320, THRESHOLD = 42, FLOOR = 8;
+    const X = (s) => X0 + (s / 100) * (X1 - X0);
+    const Y = (r) => Y_BOT - (r / 100) * (Y_BOT - Y_TOP);
+    const recallSelf = (s) =>
+      s <= THRESHOLD ? 100 : Math.max(FLOOR, 100 - ((s - THRESHOLD) / (100 - THRESHOLD)) * (100 - FLOOR));
+
+    const grid = svg.querySelector(".drift-grid");
+    const line = (x1, y1, x2, y2, cls) => {
+      const el = document.createElementNS(SVGNS, "line");
+      el.setAttribute("x1", x1); el.setAttribute("y1", y1);
+      el.setAttribute("x2", x2); el.setAttribute("y2", y2);
+      if (cls) el.setAttribute("class", cls);
+      return el;
+    };
+    const text = (x, y, str, anchor) => {
+      const el = document.createElementNS(SVGNS, "text");
+      el.setAttribute("x", x); el.setAttribute("y", y);
+      if (anchor) el.setAttribute("text-anchor", anchor);
+      el.textContent = str;
+      return el;
+    };
+    [0, 50, 100].forEach((r) => {
+      grid.appendChild(line(X0, Y(r), X1, Y(r)));
+      grid.appendChild(text(X0 - 10, Y(r) + 4, r + "%", "end"));
+    });
+    const th = line(X(THRESHOLD), Y_TOP - 6, X(THRESHOLD), Y_BOT, "drift-threshold");
+    grid.appendChild(th);
+    grid.appendChild(text(X(THRESHOLD), Y_TOP - 12, "", "middle")).setAttribute("data-th", "1");
+
+    let dSelf = "";
+    for (let s = 0; s <= 100; s += 2) dSelf += (s === 0 ? "M" : "L") + X(s).toFixed(1) + " " + Y(recallSelf(s)).toFixed(1) + " ";
+    svg.querySelector(".drift-line.selfmanaged").setAttribute("d", dSelf.trim());
+    svg.querySelector(".drift-line.ledger").setAttribute("d", "M" + X(0) + " " + Y(100) + " L" + X1 + " " + Y(100));
+
+    const marker = svg.querySelector(".drift-marker");
+    const dotSelf = svg.querySelector(".drift-dot.selfmanaged");
+    const dotLedger = svg.querySelector(".drift-dot.ledger");
+    const slider = document.getElementById("drift-scale");
+    const outSelf = driftChart.querySelector('[data-value="self"]');
+    const outLedger = driftChart.querySelector('[data-value="ledger"]');
+    const thLabel = grid.querySelector("[data-th]");
+
+    function updateDrift() {
+      const s = Number(slider.value);
+      const rs = recallSelf(s);
+      marker.setAttribute("x1", X(s)); marker.setAttribute("x2", X(s));
+      marker.setAttribute("y1", Y_TOP - 6); marker.setAttribute("y2", Y_BOT);
+      dotSelf.setAttribute("cx", X(s)); dotSelf.setAttribute("cy", Y(rs));
+      dotLedger.setAttribute("cx", X(s)); dotLedger.setAttribute("cy", Y(100));
+      if (outSelf) outSelf.textContent = Math.round(rs) + "%";
+      if (outLedger) outLedger.textContent = "100%";
+    }
+    if (thLabel) thLabel.textContent = language === "zh" ? "可携带上下文上限" : "carry limit";
+    languageButton?.addEventListener("click", () => {
+      if (thLabel) thLabel.textContent = language === "zh" ? "可携带上下文上限" : "carry limit";
+    });
+    slider?.addEventListener("input", updateDrift);
+    updateDrift();
+  }
+
   const reveals = document.querySelectorAll(".reveal");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if ("IntersectionObserver" in window && !reducedMotion) {

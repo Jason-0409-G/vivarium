@@ -1559,6 +1559,445 @@ html[data-theme="dark"] .final-cta h2 {
   outline-offset: 3px;
 }
 
+/* Core thesis + interactive drift chart */
+.thesis-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.thesis-copy p {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.thesis-copy p:first-child {
+  color: var(--ink);
+  font-size: 1.06rem;
+}
+
+.thesis-points {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thesis-points li {
+  display: grid;
+  gap: 3px;
+  padding-left: 18px;
+  border-left: 2px solid var(--green-500);
+}
+
+.thesis-points strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.thesis-points span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.drift-chart {
+  margin: 0;
+  padding: 26px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.drift-title strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+
+.drift-plot {
+  margin: 10px 0 4px;
+}
+
+.drift-plot svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.drift-grid line {
+  stroke: var(--soft-line);
+  stroke-width: 1;
+}
+
+.drift-grid text {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.drift-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.drift-line.ledger {
+  stroke: var(--green-500);
+}
+
+.drift-line.selfmanaged {
+  stroke: #d1495b;
+}
+
+.drift-anchors circle {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.drift-anchors text {
+  fill: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.drift-marker {
+  stroke: var(--blue-500);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.drift-threshold {
+  stroke: var(--line);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 4;
+}
+
+.drift-dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.drift-dot.ledger {
+  fill: var(--green-500);
+}
+
+.drift-dot.selfmanaged {
+  fill: #d1495b;
+}
+
+.drift-slider-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.drift-slider {
+  width: 100%;
+  accent-color: var(--blue-600);
+}
+
+.drift-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.drift-readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.drift-metric {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.drift-metric span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.drift-metric strong {
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.drift-metric.selfmanaged strong {
+  color: #d1495b;
+}
+
+.drift-metric.ledger strong {
+  color: var(--green-600);
+}
+
+.drift-caption {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+/* On-site skill card buttons + detail modal */
+button.skill-card {
+  appearance: none;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-chip {
+  padding: 5px 11px;
+  color: var(--blue-600);
+  font-size: 0.82rem;
+  background: var(--surface-blue);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.skill-modal {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.skill-modal[hidden] {
+  display: none;
+}
+
+.skill-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(6 21 47 / 55%);
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.2s ease;
+}
+
+.skill-modal.open .skill-modal-backdrop {
+  opacity: 1;
+}
+
+.skill-modal-dialog {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: min(86vh, 900px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+.skill-modal.open .skill-modal-dialog {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.skill-modal-scroll {
+  max-height: min(86vh, 900px);
+  padding: 34px 34px 30px;
+  overflow-y: auto;
+}
+
+.skill-modal-close {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.skill-modal-close:hover {
+  color: var(--ink);
+}
+
+.skill-modal-scroll h3 {
+  margin: 12px 0 4px;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 1.5rem;
+}
+
+.skill-modal-role {
+  margin: 0 0 14px;
+  color: var(--blue-600);
+  font-weight: 600;
+}
+
+.skill-modal-summary {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.skill-modal-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--soft-line);
+}
+
+.skill-modal-section h4 {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.skill-modal-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skill-modal-list li {
+  position: relative;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 0.94rem;
+}
+
+.skill-modal-list li::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  background: var(--green-500);
+  border-radius: 2px;
+}
+
+.skill-modal-example {
+  margin: 0;
+  padding: 16px 18px;
+  background: var(--navy-950);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.skill-modal-example code {
+  color: #d7e6ff;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* Chinese-LLM (CC Switch) endpoint quick-reference table */
+.provider-table-wrap {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+}
+
+.provider-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.provider-table-head h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.provider-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.provider-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.provider-table th,
+.provider-table td {
+  padding: 12px 16px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--soft-line);
+}
+
+.provider-table thead th {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--surface-alt);
+}
+
+.provider-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.provider-table td:first-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.provider-table code {
+  padding: 2px 7px;
+  color: var(--blue-600);
+  font-size: 0.82rem;
+  background: var(--surface-blue);
+  border-radius: 6px;
+}
+
+.provider-table-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .thesis-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
 @media (max-width: 1040px) {
   .nav-links {
     gap: 16px;
