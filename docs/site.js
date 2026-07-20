@@ -233,43 +233,73 @@
   }
 
   // Interactive drift chart: recall fidelity vs accumulated project state.
+  // Six measured scale points (N = accumulated facts) under a fixed 500-char handoff budget;
+  // self-managed = strongest model recalling the earliest 12 facts, ledger = durable-log read-back.
   const driftChart = document.querySelector(".drift-chart");
   if (driftChart) {
     const svg = driftChart.querySelector("svg");
     const SVGNS = "http://www.w3.org/2000/svg";
-    const X0 = 72, X1 = 604, Y_TOP = 40, Y_BOT = 320, THRESHOLD = 42, FLOOR = 8;
-    const X = (s) => X0 + (s / 100) * (X1 - X0);
+    const X0 = 72, X1 = 604, Y_TOP = 40, Y_BOT = 320;
+    const N_MIN = 12, N_MAX = 180;
+    // 13 measured scale points; the seven in N=65..95 resolve the collapse edge and trough.
+    const PTS = [
+      { n: 12, self: 100 }, { n: 30, self: 100 }, { n: 60, self: 100 },
+      { n: 65, self: 17 }, { n: 70, self: 17 }, { n: 75, self: 0 }, { n: 80, self: 0 },
+      { n: 85, self: 8 }, { n: 90, self: 8 }, { n: 95, self: 8 },
+      { n: 100, self: 8 }, { n: 140, self: 8 }, { n: 180, self: 8 },
+    ];
+    const TICKS = [12, 30, 60, 85, 100, 140, 180];
+    const X = (n) => X0 + ((n - N_MIN) / (N_MAX - N_MIN)) * (X1 - X0);
     const Y = (r) => Y_BOT - (r / 100) * (Y_BOT - Y_TOP);
-    const recallSelf = (s) =>
-      s <= THRESHOLD ? 100 : Math.max(FLOOR, 100 - ((s - THRESHOLD) / (100 - THRESHOLD)) * (100 - FLOOR));
+    const recallSelf = (n) => {
+      if (n <= PTS[0].n) return PTS[0].self;
+      const last = PTS[PTS.length - 1];
+      if (n >= last.n) return last.self;
+      for (let i = 0; i < PTS.length - 1; i++) {
+        const a = PTS[i], b = PTS[i + 1];
+        if (n >= a.n && n <= b.n) return a.self + ((n - a.n) / (b.n - a.n)) * (b.self - a.self);
+      }
+      return last.self;
+    };
 
     const grid = svg.querySelector(".drift-grid");
-    const line = (x1, y1, x2, y2, cls) => {
-      const el = document.createElementNS(SVGNS, "line");
-      el.setAttribute("x1", x1); el.setAttribute("y1", y1);
-      el.setAttribute("x2", x2); el.setAttribute("y2", y2);
-      if (cls) el.setAttribute("class", cls);
-      return el;
+    const anchors = svg.querySelector(".drift-anchors");
+    const el = (tag, attrs) => {
+      const node = document.createElementNS(SVGNS, tag);
+      for (const k in attrs) node.setAttribute(k, attrs[k]);
+      return node;
     };
     const text = (x, y, str, anchor) => {
-      const el = document.createElementNS(SVGNS, "text");
-      el.setAttribute("x", x); el.setAttribute("y", y);
-      if (anchor) el.setAttribute("text-anchor", anchor);
-      el.textContent = str;
-      return el;
+      const node = document.createElementNS(SVGNS, "text");
+      node.setAttribute("x", x); node.setAttribute("y", y);
+      if (anchor) node.setAttribute("text-anchor", anchor);
+      node.textContent = str;
+      return node;
     };
+    // Horizontal gridlines + y-axis labels.
     [0, 50, 100].forEach((r) => {
-      grid.appendChild(line(X0, Y(r), X1, Y(r)));
+      grid.appendChild(el("line", { x1: X0, y1: Y(r), x2: X1, y2: Y(r) }));
       grid.appendChild(text(X0 - 10, Y(r) + 4, r + "%", "end"));
     });
-    const th = line(X(THRESHOLD), Y_TOP - 6, X(THRESHOLD), Y_BOT, "drift-threshold");
-    grid.appendChild(th);
-    grid.appendChild(text(X(THRESHOLD), Y_TOP - 12, "", "middle")).setAttribute("data-th", "1");
+    // Measured collapse band: recall left 100% just past N=60 and stabilized at the 8% floor by N=85.
+    grid.appendChild(el("rect", {
+      x: X(60), y: Y_TOP - 6, width: X(85) - X(60), height: Y_BOT - (Y_TOP - 6),
+      fill: "#d1495b", opacity: "0.08",
+    }));
+    // X-axis tick labels (curated subset; every measured N is drawn as a dot below).
+    TICKS.forEach((n) => grid.appendChild(text(X(n), Y_BOT + 22, String(n), "middle")));
 
+    // Series polylines through the measured points.
     let dSelf = "";
-    for (let s = 0; s <= 100; s += 2) dSelf += (s === 0 ? "M" : "L") + X(s).toFixed(1) + " " + Y(recallSelf(s)).toFixed(1) + " ";
+    PTS.forEach((p, i) => { dSelf += (i === 0 ? "M" : "L") + X(p.n).toFixed(1) + " " + Y(p.self).toFixed(1) + " "; });
     svg.querySelector(".drift-line.selfmanaged").setAttribute("d", dSelf.trim());
-    svg.querySelector(".drift-line.ledger").setAttribute("d", "M" + X(0) + " " + Y(100) + " L" + X1 + " " + Y(100));
+    svg.querySelector(".drift-line.ledger").setAttribute("d", "M" + X(N_MIN) + " " + Y(100) + " L" + X(N_MAX) + " " + Y(100));
+
+    // Static dots at every measured point, so each series reads as six real measurements.
+    PTS.forEach((p) => {
+      anchors.appendChild(el("circle", { cx: X(p.n), cy: Y(100), r: 4, class: "ledger" }));
+      anchors.appendChild(el("circle", { cx: X(p.n), cy: Y(p.self), r: 4, class: "selfmanaged" }));
+    });
 
     const marker = svg.querySelector(".drift-marker");
     const dotSelf = svg.querySelector(".drift-dot.selfmanaged");
@@ -277,22 +307,27 @@
     const slider = document.getElementById("drift-scale");
     const outSelf = driftChart.querySelector('[data-value="self"]');
     const outLedger = driftChart.querySelector('[data-value="ledger"]');
-    const thLabel = grid.querySelector("[data-th]");
+    if (slider) {
+      slider.min = String(N_MIN); slider.max = String(N_MAX); slider.step = "1";
+      const v = Number(slider.value);
+      if (v < N_MIN || v > N_MAX) slider.value = "120";
+    }
+    const driftN = document.createElement("div");
+    driftN.className = "drift-n";
+    slider?.parentElement?.appendChild(driftN);
 
     function updateDrift() {
-      const s = Number(slider.value);
-      const rs = recallSelf(s);
-      marker.setAttribute("x1", X(s)); marker.setAttribute("x2", X(s));
+      const n = Number(slider.value);
+      const rs = recallSelf(n);
+      marker.setAttribute("x1", X(n)); marker.setAttribute("x2", X(n));
       marker.setAttribute("y1", Y_TOP - 6); marker.setAttribute("y2", Y_BOT);
-      dotSelf.setAttribute("cx", X(s)); dotSelf.setAttribute("cy", Y(rs));
-      dotLedger.setAttribute("cx", X(s)); dotLedger.setAttribute("cy", Y(100));
+      dotSelf.setAttribute("cx", X(n)); dotSelf.setAttribute("cy", Y(rs));
+      dotLedger.setAttribute("cx", X(n)); dotLedger.setAttribute("cy", Y(100));
       if (outSelf) outSelf.textContent = Math.round(rs) + "%";
       if (outLedger) outLedger.textContent = "100%";
+      driftN.textContent = "N = " + n + (language === "zh" ? " 个累积事实" : " facts");
     }
-    if (thLabel) thLabel.textContent = language === "zh" ? "可携带上下文上限" : "carry limit";
-    languageButton?.addEventListener("click", () => {
-      if (thLabel) thLabel.textContent = language === "zh" ? "可携带上下文上限" : "carry limit";
-    });
+    languageButton?.addEventListener("click", updateDrift);
     slider?.addEventListener("input", updateDrift);
     updateDrift();
   }

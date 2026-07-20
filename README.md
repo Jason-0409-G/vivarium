@@ -27,7 +27,7 @@
 
 ---
 
-**vivarium 帮助研究者把一组基因组文件转化为可追踪的比较基因组分析流程。** 它会规划分析步骤、运行已有工具、检查每项结果并记录已完成工作；如果流程中断，可以从最后一个已验证步骤继续。Claude Code 与 Codex 使用同一套工作流。
+**vivarium 将一组基因组的分析目标转化为可验证、可追溯、可崩溃恢复的比较基因组学工作流。** 它规划分析阶段、调用真实生物信息学工具、对每一步产物实施提交前校验，并将已完成工作写入仅追加事件日志；流程中断后，可从最后一个已验证阶段确定性恢复。Claude Code 与 Codex 使用同一套工作流。
 
 ## 项目状态
 
@@ -291,11 +291,13 @@ Snakemake 与 Nextflow 提供更成熟的静态 DAG、调度器集成和集群�
 
 2.0 持久化内核仅使用 Python 标准库，不需要额外 pip 运行时依赖。分析工具从 `bio_tools` conda 环境解析，并仅在对应阶段调用。
 
-- **质控与注释：** seqkit、Prokka；CheckM2、Flye、eggNOG-mapper、dbCAN 用于可选或重计算阶段。
-- **比较：** FastANI、EzAAI、OrthoFinder、MUMmer4。
-- **系统发育：** MAFFT、trimAl、IQ-TREE、FastTree、PAML、PAL2NAL。
-- **检索：** BLAST+、DIAMOND、HMMER。
-- **出图：** Python（pandas、matplotlib）或 R（ggplot2、svglite、ragg）。
+| 分析环节 | 调用的分析工具 |
+| --- | --- |
+| 质量控制与功能注释 | seqkit、Prokka；CheckM2、Flye、eggNOG-mapper、dbCAN（用于可选或重计算阶段） |
+| 比较基因组学 | FastANI、EzAAI、OrthoFinder、MUMmer4 |
+| 系统发育推断 | MAFFT、trimAl、IQ-TREE、FastTree、PAML、PAL2NAL |
+| 序列检索与比对 | BLAST+、DIAMOND、HMMER |
+| 结果可视化 | Python（pandas、matplotlib）或 R（ggplot2、svglite、ragg） |
 
 vivarium 不自动安装软件或数据库，不修改用户分析环境。缺失依赖会产生明确诊断，并将阶段转为外部执行或待处理状态。
 

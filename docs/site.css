@@ -1692,6 +1692,22 @@ html[data-theme="dark"] .final-cta h2 {
   fill: #d1495b;
 }
 
+.drift-anchors circle.selfmanaged {
+  fill: #d1495b;
+}
+
+.drift-anchors circle.ledger {
+  fill: var(--green-500);
+}
+
+.drift-n {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .drift-slider-label {
   display: block;
   margin-bottom: 6px;

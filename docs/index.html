@@ -163,14 +163,14 @@
           </div>
           <div class="drift-controls">
             <label class="drift-slider-label" for="drift-scale" data-zh="项目累积状态规模" data-en="Accumulated project state">项目累积状态规模</label>
-            <input id="drift-scale" class="drift-slider" type="range" min="0" max="100" value="18" step="1" aria-describedby="drift-readout">
+            <input id="drift-scale" class="drift-slider" type="range" min="12" max="180" value="120" step="1" aria-describedby="drift-readout">
             <div class="drift-scale-ends"><span data-zh="装得进上下文" data-en="Fits in context">装得进上下文</span><span data-zh="远超可携带上下文" data-en="Far exceeds carryable context">远超可携带上下文</span></div>
           </div>
           <div class="drift-readout" id="drift-readout" aria-live="polite">
             <div class="drift-metric selfmanaged"><span data-zh="自管理上下文 / handoff" data-en="Self-managed context / handoff">自管理上下文 / handoff</span><strong data-value="self">100%</strong></div>
             <div class="drift-metric ledger"><span data-zh="持久事件日志（vivarium）" data-en="Durable event log (vivarium)">持久事件日志（vivarium）</span><strong data-value="ledger">100%</strong></div>
           </div>
-          <p class="drift-caption" data-zh="两个区间为实测：状态装得进上下文时两者均为 100%；状态远超可携带上下文时，最强模型自管理复述最早事实仅 8%，而读回持久日志仍为 100%。区间之间的过渡为示意插值，非逐点实测。" data-en="Two regimes are measured: when state fits in context, both are 100%; when state far exceeds carryable context, the strongest model self-managing recall of the earliest facts reaches only 8%, while read-back from the durable log remains 100%. The transition between regimes is a schematic interpolation, not point-by-point measurement.">两个区间为实测：状态装得进上下文时两者均为 100%；状态远超可携带上下文时，最强模型自管理复述最早事实仅 8%，而读回持久日志仍为 100%。区间之间的过渡为示意插值，非逐点实测。</p>
+          <p class="drift-caption" data-zh="十三个规模点均为逐点实测（固定 500 字符交接预算，复述最早的 12 个事实）：N≤60 时自管理与持久日志召回均为 100%；越过 N=60 仅需 5 个事实（N=65）自管理即骤降至 17%，在 N=75–80 触底 0%，N≥85 稳定在 8%（12 个中仅存 1 个）；读回持久日志在所有规模恒为 100%。这是预算阈值处的相变——坍缩集中在极窄的区间，而非缓慢下滑。阴影为召回坍缩并趋稳的实测区间。" data-en="All thirteen scale points are measured (fixed 500-character handoff budget, recalling the earliest 12 facts): at N ≤ 60, both self-managed and durable-log recall are 100%; just five facts past N=60 (N=65) self-managed recall plunges to 17%, bottoms out at 0% around N=75–80, and stabilizes at 8% (1 of 12) for N ≥ 85; durable-log read-back stays 100% at every scale. This is a phase transition at the budget threshold — the collapse is confined to a very narrow interval rather than a gradual decline. The shaded band is the measured interval in which recall collapsed and settled.">十三个规模点均为逐点实测（固定 500 字符交接预算，复述最早的 12 个事实）：N≤60 时自管理与持久日志召回均为 100%；越过 N=60 仅需 5 个事实（N=65）自管理即骤降至 17%，在 N=75–80 触底 0%，N≥85 稳定在 8%（12 个中仅存 1 个）；读回持久日志在所有规模恒为 100%。这是预算阈值处的相变——坍缩集中在极窄的区间，而非缓慢下滑。阴影为召回坍缩并趋稳的实测区间。</p>
         </figure>
       </div>
     </section>
@@ -432,8 +432,8 @@ bash install.sh --target all      # all five clients</code></pre></div>
       <div class="contact-grid">
         <div class="reveal">
           <span class="section-kicker" data-zh="联系与共建" data-en="Contact &amp; contribute">联系与共建</span>
-          <h2 data-zh="欢迎生信同行使用，并一起把这套 loop workflow 做得更好" data-en="Welcome to use it — and to help make this loop workflow better">欢迎生信同行使用，并一起把这套 loop workflow 做得更好</h2>
-          <p data-zh="欢迎从事生物信息学分析的老师与同行使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。" data-en="Bioinformatics researchers and practitioners are warmly welcome to use this loop workflow. If you have ideas, or find anything to correct or improve, please reach out — and you are cordially invited to join as a co-contributor and help develop the project together.">欢迎从事生物信息学分析的老师与同行使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。</p>
+          <h2 data-zh="欢迎从事生信方向的老师使用，并一起把这套 loop workflow 做得更好" data-en="Welcome to faculty in bioinformatics — and to help make this loop workflow better">欢迎从事生信方向的老师使用，并一起把这套 loop workflow 做得更好</h2>
+          <p data-zh="欢迎从事生信方向的老师使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。" data-en="Faculty and researchers working in bioinformatics are warmly welcome to use this loop workflow. If you have ideas, or find anything to correct or improve, please reach out — and you are cordially invited to join as a co-contributor and help develop the project together.">欢迎从事生信方向的老师使用这套 loop workflow。若在使用中产生任何想法，或发现需要修正、可以优化之处，欢迎与我联系；也诚挚邀请你作为共同贡献者（co-contributor）一起完善这个项目。</p>
           <a class="button primary contact-mail-cta" href="mailto:jiangao202407@163.com?subject=vivarium%20loop%20workflow"><span aria-hidden="true">✉</span><span data-zh="一键发邮件给作者" data-en="Email the author in one click">一键发邮件给作者</span></a>
           <div class="contact-methods">
             <a class="contact-item" href="mailto:jiangao202407@163.com"><span class="contact-icon" aria-hidden="true">✉</span><span class="contact-text"><small data-zh="邮箱" data-en="Email">邮箱</small><strong>jiangao202407@163.com</strong></span></a>

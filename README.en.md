@@ -27,7 +27,7 @@
 
 ---
 
-**vivarium helps researchers turn a collection of genome files into a traceable comparative-genomics workflow.** It plans the analysis, runs available tools, checks each result, and records completed work. If execution is interrupted, it resumes from the last verified step. Claude Code and Codex use the same workflow.
+**vivarium turns the analysis goals for a set of genomes into a verifiable, traceable, crash-recoverable comparative-genomics workflow.** It plans the analysis stages, invokes real bioinformatics tools, validates each stage's artifacts before commit, and records completed work in an append-only event log; after an interruption it resumes deterministically from the last verified stage. Claude Code and Codex use the same workflow.
 
 ## Project status
 
@@ -291,11 +291,13 @@ The six skills collectively provide **69** should-trigger and should-not-trigger
 
 The 2.0 durable kernel uses only the Python standard library and introduces no additional pip runtime dependencies. Analysis tools are resolved from the `bio_tools` conda environment and invoked only by their corresponding stages.
 
-- **QC and annotation:** seqkit and Prokka; CheckM2, Flye, eggNOG-mapper, and dbCAN serve optional or compute-intensive stages.
-- **Comparison:** FastANI, EzAAI, OrthoFinder, and MUMmer4.
-- **Phylogenetics:** MAFFT, trimAl, IQ-TREE, FastTree, PAML, and PAL2NAL.
-- **Search:** BLAST+, DIAMOND, and HMMER.
-- **Plotting:** Python (pandas and matplotlib) or R (ggplot2, svglite, and ragg).
+| Analysis stage | Analysis tools invoked |
+| --- | --- |
+| Quality control and functional annotation | seqkit, Prokka; CheckM2, Flye, eggNOG-mapper, dbCAN (optional or compute-intensive stages) |
+| Comparative genomics | FastANI, EzAAI, OrthoFinder, MUMmer4 |
+| Phylogenetic inference | MAFFT, trimAl, IQ-TREE, FastTree, PAML, PAL2NAL |
+| Sequence search and alignment | BLAST+, DIAMOND, HMMER |
+| Result visualization | Python (pandas, matplotlib) or R (ggplot2, svglite, ragg) |
 
 vivarium does not install software or databases automatically and does not modify the user's analysis environment. Missing dependencies produce explicit diagnostics and route the affected stage to external execution or a pending state.
 
