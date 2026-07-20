@@ -38,11 +38,11 @@ LLM 驱动的比较基因组学分析有两处静默失效。其一，流程跑�
 
 **方式一 · 插件市场（推荐）**
 ```
-/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
+/plugin marketplace add Jason-0409-G/vivarium
 /plugin install vivarium@vivarium
 /reload-plugins
 ```
-> 使用完整 HTTPS 地址可避免安装过程依赖本机 SSH 凭据。
+> GitHub 的 `owner/repo` 写法会解析仓库默认分支（本仓库当前为 `master`），不受 Codex Skill Installer 的 `main` 默认值影响。如需显式锁定分支，可改用 `/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git#master`。
 
 如需审阅源码或固定本地副本，可克隆仓库后运行安装脚本：
 
@@ -90,7 +90,7 @@ done
 
 ## 更新
 
-发布版本由 `.claude-plugin/plugin.json` 中的 `version` 字段标识，并遵循语义化版本约定；版本变更记录以根目录 [`CHANGELOG.md`](CHANGELOG.md) 为准。
+发布版本由 `.claude-plugin/plugin.json` 中的 `version` 字段标识，并遵循语义化版本约定；版本变更记录以根目录 [`CHANGELOG.md`](CHANGELOG.md) 为准。由于本插件采用显式版本号，每次正式发布均须递增该字段；仅向 `master` 推送代码而不更新版本号，不会触发已安装插件升级。
 
 ### Claude Code
 
@@ -103,6 +103,8 @@ done
 /reload-plugins                         # 本会话即时生效（或重启）
 ```
 也可在 `/plugin` → Marketplaces 中为 `vivarium` 启用 **auto-update**。自动更新仍以市场索引和插件版本号为判定依据。
+
+维护者可在发布前从仓库根目录执行 `claude plugin validate .`，验证 marketplace、plugin manifest 与技能元数据。
 
 本地脚本安装不会自动同步仓库；更新时需显式拉取代码并重新执行安装脚本：
 

@@ -38,11 +38,11 @@ Installation through the plugin marketplace is recommended because it centralize
 
 **Option 1 · Plugin marketplace (recommended)**
 ```
-/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git
+/plugin marketplace add Jason-0409-G/vivarium
 /plugin install vivarium@vivarium
 /reload-plugins
 ```
-> Use the complete HTTPS address so that installation does not depend on local SSH credentials.
+> The GitHub `owner/repo` form resolves the repository's default branch (currently `master`) and is not affected by Codex Skill Installer's `main` default. To pin the branch explicitly, use `/plugin marketplace add https://github.com/Jason-0409-G/vivarium.git#master` instead.
 
 For source inspection or a pinned local checkout, clone the repository and run the installation script:
 
@@ -90,7 +90,7 @@ This method retains a single source checkout, so a subsequent `git pull` exposes
 
 ## Updating
 
-Release identity is defined by the `version` field in `.claude-plugin/plugin.json` and follows semantic-versioning conventions; the root [`CHANGELOG.md`](CHANGELOG.md) is the authoritative record of version-specific changes.
+Release identity is defined by the `version` field in `.claude-plugin/plugin.json` and follows semantic-versioning conventions; the root [`CHANGELOG.md`](CHANGELOG.md) is the authoritative record of version-specific changes. Because this plugin uses an explicit version, every formal release must increment that field; pushing code to `master` without changing the version does not trigger an upgrade for installed copies.
 
 ### Claude Code
 
@@ -103,6 +103,8 @@ Marketplace installations should refresh the catalog before installing the lates
 /reload-plugins                         # take effect immediately in this session (or restart)
 ```
 You may also enable **auto-update** for `vivarium` under `/plugin` → Marketplaces. Update detection remains governed by the marketplace catalog and plugin version.
+
+Before a release, maintainers can run `claude plugin validate .` from the repository root to validate the marketplace, plugin manifest, and skill metadata.
 
 A script-based installation does not synchronize the repository automatically. Update the checkout explicitly and rerun the installer:
 
