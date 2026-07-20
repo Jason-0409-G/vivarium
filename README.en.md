@@ -55,14 +55,14 @@ bash install.sh            # copies skills/ into ~/.claude/skills/
 
 ### Codex
 
-Codex discovers skills from the user-level `$HOME/.agents/skills` directory and repository-level `.agents/skills` directories, and it follows symlinked skill folders. A complete vivarium installation must register the umbrella skill and all five sub-skills.
+`$skill-installer` installs skills into `$CODEX_HOME/skills` (default: `~/.codex/skills`). For manual installations, Codex also discovers skills from the user-level `$HOME/.agents/skills` directory and repository-level `.agents/skills` directories, and it follows symlinked skill folders. A complete vivarium installation must register the umbrella skill and all five sub-skills.
 
 **Option 1 · `$skill-installer` (recommended)**
 
 Paste the following request into Codex:
 
 ```text
-Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
+Use $skill-installer to install these paths from repo Jason-0409-G/vivarium using --ref master:
 skills/vivarium
 skills/vivarium-prep
 skills/vivarium-compare
@@ -70,6 +70,8 @@ skills/vivarium-phylo
 skills/vivarium-search
 skills/vivarium-report
 ```
+
+> This repository's default branch is `master`, whereas `$skill-installer` defaults `--ref` to `main`. Do not omit `--ref master`; otherwise the download step will fail.
 
 Newly installed skills are normally available on the next task. Restart Codex if the skill list does not refresh.
 
@@ -120,7 +122,7 @@ cd vivarium
 git pull
 ```
 
-Codex normally detects changed skill files automatically. Restart Codex if the active session continues to expose the previous version. Independent copies installed through `$skill-installer` should be synchronized again from the same six repository paths; for continuous repository tracking, prefer the local-clone-and-symlink method.
+Codex normally detects changed skill files automatically. Restart Codex if the active session continues to expose the previous version. Independent copies installed through `$skill-installer` should be synchronized again from the same six repository paths with `--ref master` specified explicitly; for continuous repository tracking, prefer the local-clone-and-symlink method.
 
 ## Why use vivarium (rather than just running scripts)
 

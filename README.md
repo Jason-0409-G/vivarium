@@ -55,14 +55,14 @@ bash install.sh            # 将 skills/ 拷入 ~/.claude/skills/
 
 ### Codex
 
-Codex 可从用户级 `$HOME/.agents/skills` 或仓库级 `.agents/skills` 发现技能，并支持符号链接。安装本仓库时必须同时注册伞型技能及五个子技能。
+`$skill-installer` 将技能安装到 `$CODEX_HOME/skills`（默认 `~/.codex/skills`）。如采用手工安装，Codex 也可从用户级 `$HOME/.agents/skills` 或仓库级 `.agents/skills` 发现技能，并支持符号链接。安装本仓库时必须同时注册伞型技能及五个子技能。
 
 **方式一 · `$skill-installer`（推荐）**
 
 将以下请求粘贴到 Codex：
 
 ```text
-Use $skill-installer to install these paths from https://github.com/Jason-0409-G/vivarium:
+Use $skill-installer to install these paths from repo Jason-0409-G/vivarium using --ref master:
 skills/vivarium
 skills/vivarium-prep
 skills/vivarium-compare
@@ -70,6 +70,8 @@ skills/vivarium-phylo
 skills/vivarium-search
 skills/vivarium-report
 ```
+
+> 本仓库默认分支为 `master`，而 `$skill-installer` 的默认 `--ref` 是 `main`；因此不得省略 `--ref master`，否则下载阶段会失败。
 
 新安装的技能通常在下一轮任务中自动可用；若技能列表未刷新，请重启 Codex。
 
@@ -120,7 +122,7 @@ cd vivarium
 git pull
 ```
 
-Codex 通常会自动检测技能文件变化；若当前会话仍显示旧版本，请重启 Codex。通过 `$skill-installer` 安装的独立副本应按照相同的六个技能路径重新同步；需要持续跟踪仓库更新时，建议使用本地克隆与符号链接方式。
+Codex 通常会自动检测技能文件变化；若当前会话仍显示旧版本，请重启 Codex。通过 `$skill-installer` 安装的独立副本应按相同的六个技能路径并显式指定 `--ref master` 重新同步；需要持续跟踪仓库更新时，建议使用本地克隆与符号链接方式。
 
 ## 为什么用 vivarium（而不是直接跑脚本）
 
