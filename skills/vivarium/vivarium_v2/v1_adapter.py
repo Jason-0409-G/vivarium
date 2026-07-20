@@ -65,7 +65,12 @@ ACTIONS: dict[tuple[str, str], dict] = {
     ("phylo", "tree_fast"): {"mode": "inline", "tools": ["mafft", "trimal", "FastTree"]},
     ("phylo", "tree"): {"mode": "inline", "tools": ["mafft", "trimal", "iqtree"]},
     ("phylo", "selection"): {"mode": "scaffold", "tools": ["pal2nal.pl", "codeml"]},
-    ("search", "sequence_search"): {"mode": "inline", "tools": ["blastp", "makeblastdb"]},
+    # vivarium_search.sh takes its flags directly, with no positional action arg.
+    ("search", "sequence_search"): {
+        "mode": "inline",
+        "tools": ["blastp", "makeblastdb"],
+        "positional_action": False,
+    },
     ("report", "heatmap"): {"mode": "inline", "tools": []},
     ("report", "bars"): {"mode": "inline", "tools": []},
 }
@@ -112,7 +117,10 @@ def v1_step_argv(
     script = V1_SCRIPTS.get(subskill)
     if script is None:
         raise KeyError(f"unknown V1 sub-skill: {subskill}")
-    return ["bash", str(script), action, *_flatten(flags)]
+    spec = ACTIONS.get((subskill, action), {})
+    if spec.get("positional_action", True):
+        return ["bash", str(script), action, *_flatten(flags)]
+    return ["bash", str(script), *_flatten(flags)]
 
 
 def missing_tools(subskill: str, action: str, *, path: str | None = None) -> list[str]:

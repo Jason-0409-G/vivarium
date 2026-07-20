@@ -127,6 +127,43 @@ class V1AdapterTests(unittest.TestCase):
         self.assertTrue(figures, "a real figure file must be produced and sealed")
 
     @unittest.skipUnless(
+        not missing_tools("search", "sequence_search", path=_ENV["PATH"]),
+        "blast not on the resolved PATH",
+    )
+    def test_search_sequence_search_runs_real_blast_through_the_durable_engine(self):
+        # search:sequence_search runs a real BLASTP through the durable engine and
+        # commits its hit table. vivarium_search.sh takes flags directly (no
+        # positional action), which the adapter handles.
+        store = self._store("search", "search-run")
+        seqs = self.root / "seqs"
+        seqs.mkdir()
+        protein = "MKVLIAGDTRSHKPWQEFNYCLMDGATRSVWYPQEKLHNFCMTAGDRSVWYP"
+        (seqs / "query.faa").write_text(f">q1\n{protein}\n", encoding="ascii")
+        (seqs / "target.faa").write_text(
+            f">t1\n{protein}\n>decoy\n{'G' * 40}\n", encoding="ascii"
+        )
+        step = run_v1_step(
+            store,
+            run_id="search-run",
+            subskill="search",
+            action="sequence_search",
+            flags={
+                "--query": str(seqs / "query.faa"),
+                "--target": str(seqs / "target.faa"),
+                "--type": "prot",
+                "--out": "hits.tsv",
+            },
+        )
+        self.assertTrue(step.committed)
+        hits = (
+            store.root
+            / "runs" / "search-run" / "attempts" / "stage-1" / "attempt-1" / "workspace"
+            / "hits.tsv"
+        ).read_text(encoding="ascii")
+        self.assertIn("q1", hits)
+        self.assertIn("t1", hits)
+
+    @unittest.skipUnless(
         shutil.which("fastANI") and (GENOMES / "S_vesiculosa_M7.fna").is_file(),
         "fastANI or genome fixtures not present",
     )
