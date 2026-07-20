@@ -127,6 +127,46 @@ class V1AdapterTests(unittest.TestCase):
         self.assertTrue(figures, "a real figure file must be produced and sealed")
 
     @unittest.skipUnless(
+        not missing_tools("phylo", "tree", path=_ENV["PATH"]),
+        "mafft/trimal/iqtree not on the resolved PATH",
+    )
+    def test_phylo_tree_runs_real_iqtree_through_the_durable_engine(self):
+        # phylo:tree runs the real MAFFT -> trimAl -> IQ-TREE pipeline through the
+        # durable engine and commits the ML tree; --seed keeps it reproducible.
+        store = self._store("phylo", "phylo-run")
+        homologs = self.root / "homologs.faa"
+        homologs.write_text(
+            ">a\nMKVLIAGDTRSHKPWQEFNYCLMDGATRSVWY\n"
+            ">b\nMKVLIAGDTKSHKPWQEFNYCLMDGATRSVWY\n"
+            ">c\nMKVLIAGDTRSHKPYQEFNYCLNDGATRSVWY\n"
+            ">d\nMKVLTAGDTRSHKPWQEFNYCLMDGATRSVWY\n",
+            encoding="ascii",
+        )
+        step = run_v1_step(
+            store,
+            run_id="phylo-run",
+            subskill="phylo",
+            action="tree",
+            flags={
+                "--input": str(homologs),
+                "--out": "tree",
+                "--bb": 1000,
+                "--threads": 1,
+                "--seed": 42,
+            },
+        )
+        self.assertTrue(step.committed)
+        workspace = (
+            store.root / "runs" / "phylo-run" / "attempts" / "stage-1" / "attempt-1" / "workspace"
+        )
+        treefile = workspace / "tree.treefile"
+        self.assertTrue(treefile.is_file())
+        # a Newick tree with all four taxa
+        newick = treefile.read_text(encoding="ascii")
+        for taxon in ("a", "b", "c", "d"):
+            self.assertIn(taxon, newick)
+
+    @unittest.skipUnless(
         not missing_tools("search", "sequence_search", path=_ENV["PATH"]),
         "blast not on the resolved PATH",
     )
