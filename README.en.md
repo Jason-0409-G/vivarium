@@ -17,7 +17,7 @@
   <a href="#project-status">Status</a> ·
   <a href="#installation">Installation</a> ·
   <a href="#running-the-complete-workflow">Quick start</a> ·
-  <a href="#core-mechanism-and-technical-positioning">Core mechanism</a> ·
+  <a href="#what-vivarium-does">How it works</a> ·
   <a href="#skill-index">Skill index</a> ·
   <a href="#benchmarks">Benchmarks</a> ·
   <a href="README.md">中文</a>
@@ -25,7 +25,7 @@
 
 ---
 
-**vivarium is a dual-client workflow skill set and durable execution kernel for comparative genomics.** It converts analytical goals into validated, recoverable, and auditable stage graphs while providing the same workflow contracts in Claude Code and Codex.
+**vivarium helps researchers turn a collection of genome files into a traceable comparative-genomics workflow.** It plans the analysis, runs available tools, checks each result, and records completed work. If execution is interrupted, it resumes from the last verified step. Claude Code and Codex use the same workflow.
 
 ## Project status
 
@@ -157,25 +157,46 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 
 The current `full` goal expands to assembly statistics → annotation → ANI → AAI → orthology → synteny → phylogeny → heatmap. Sequence search and PAML selection analysis require additional inputs and are not added automatically when query sequences, databases, or codon alignments are absent.
 
-## Core mechanism and technical positioning
+## What vivarium does
 
-LLM-mediated long workflows have two classes of state risk. Mutable manifests can become inconsistent after interruption or partial writes, and model context can diverge from computed artifacts during cross-stage recitation. vivarium 2.0 moves workflow state from model memory and mutable files into an append-only, hash-chained event ledger, with fail-closed evidence validation before commit.
+Suppose `genomes/` contains the genomes you want to compare, and you need species relatedness, orthology, synteny, phylogeny, and final figures. You provide the analytical goal and output location. vivarium organizes the work into a workflow that can be reviewed, paused, and resumed.
 
-### Durable loop
-
-| Stage | Function | Verifiable result |
+| Step | What vivarium does | What this means for the user |
 |---|---|---|
-| **PLAN** | Expand a goal into an ordered DAG | Exact commands, expected artifacts, and dependency edges |
-| **ROUTE** | Probe CPU, memory, tools, and schedulers | `local_inline`, `cluster`, or `scaffold_local` |
-| **EXECUTE** | Run real tools in isolated processes | Exit status, stdout, stderr, and artifacts |
-| **VALIDATE** | Check exit status and non-empty artifacts | Failed stages cannot enter the commit path |
-| **C-1 GATE** | Revalidate four persistent evidence objects | Evidence bundle, successful-completion record, quorum pass, and completion proof |
-| **SEAL** | Canonicalize, hash, synchronize, and append | Immutable, queryable committed facts |
-| **RECOVER** | Replay validated events | Idempotent recovery without rerunning committed stages |
+| **1. Define the work before running it** | Lists the analysis order, required tools, input files, and expected outputs | You can review the complete plan before computation begins |
+| **2. Choose where each step should run** | Checks local CPU, memory, installed tools, and available cluster schedulers | Small tasks can run locally; heavy tasks return a cluster script or external command |
+| **3. Run tools and verify their outputs** | Invokes real bioinformatics programs and checks exit status and output files | Failed commands and empty files cannot be passed downstream as successful results |
+| **4. Record verified work** | Stores artifacts, exact commands, tool versions, and validation records | Every reported result can be traced to a file and an actual computation |
+| **5. Resume after interruption** | Reloads verified records and skips completed steps | A terminated process or restarted machine does not require the workflow to begin again |
 
-Event objects use restricted RFC 8785/JCS canonical JSON, domain-separated SHA-256 digests, and an append-only JSONL ledger. Writes use fsync ordering, and incomplete trailing records are isolated. “Deterministic recovery” specifically means **byte-for-byte reconstruction of workflow state from the same ledger**. It does not imply bitwise-identical bioinformatics results across operating systems, tool versions, or hardware platforms.
+For example, the `full` goal plans assembly statistics, annotation, ANI, AAI, orthology, synteny, phylogeny, and a heatmap. If the AAI stage finds that EzAAI is unavailable, vivarium neither installs it without permission nor invents a substitute result. The workflow pauses and returns the exact command, expected artifact, and collection location. After the user completes the external calculation and reruns the workflow, vivarium validates the returned file and continues.
 
-The C-1 gate requires all four evidence objects to bind to the committed run/cut/claim/contract. A non-zero exit status, empty artifact, or inconsistent evidence binding terminates the commit before sealing and prevents failed state from entering downstream processing.
+### Why this is more than a chain of scripts
+
+- **A command running is not sufficient evidence of completion.** A stage is complete only after its exit status, artifacts, and evidence records pass validation.
+- **Workflow state does not depend on model memory.** When a value is reported, it is read from a verified artifact rather than recalled from earlier context.
+- **Completed work is not overwritten.** New records are append-only; recovery rebuilds state from existing records and skips committed stages.
+
+<details>
+<summary><strong>Technical details: durable loop, event ledger, and C-1 gate</strong></summary>
+
+The internal execution order is `PLAN → ROUTE → EXECUTE → VALIDATE → C-1 GATE → SEAL → RECOVER`.
+
+| Internal stage | Technical responsibility |
+|---|---|
+| **PLAN** | Expand the goal into an ordered DAG with commands, artifacts, and dependency edges |
+| **ROUTE** | Select `local_inline`, `cluster`, or `scaffold_local` |
+| **EXECUTE** | Capture exit status, stdout, stderr, and artifacts from an isolated process |
+| **VALIDATE** | Reject non-zero exit status and empty artifacts |
+| **C-1 GATE** | Revalidate the evidence bundle, successful-completion record, quorum pass, and completion proof |
+| **SEAL** | Canonicalize, hash, synchronize, and append immutable events |
+| **RECOVER** | Replay validated events while remaining idempotent over committed stages |
+
+Event objects use restricted RFC 8785/JCS canonical JSON, domain-separated SHA-256 digests, and an append-only JSONL ledger. Writes use fsync ordering, and incomplete trailing records are isolated. The C-1 gate requires all four evidence objects to bind to the committed run/cut/claim/contract; non-zero exit status, empty artifacts, or inconsistent bindings terminate the commit before sealing.
+
+“Deterministic recovery” specifically means **byte-for-byte reconstruction of workflow state from the same ledger**. It does not imply bitwise-identical bioinformatics results across operating systems, tool versions, or hardware platforms.
+
+</details>
 
 ### Relationship between 1.0 and 2.0
 
