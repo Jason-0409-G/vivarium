@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from skills.vivarium.vivarium_v2.project import ProjectStore
+from skills.vivarium.vivarium_v2.state import DependencyHead
 from skills.vivarium.vivarium_v2.v1_adapter import (
     V1StepNeedsScaffold,
     ingest_v1_step,
@@ -103,6 +104,55 @@ class V1AdapterTests(unittest.TestCase):
         state = store.recover()
         run = next(item for item in state.federated_states if item.run_id == "annotate-run")
         self.assertNotEqual(run.analysis_state.value, "COMMITTED")
+
+    @unittest.skipUnless(
+        _HAS_PLOT_LIBS
+        and shutil.which("fastANI")
+        and (GENOMES / "S_vesiculosa_M7.fna").is_file(),
+        "fastANI / plot libs / genomes not all present",
+    )
+    def test_v1_pipeline_ani_then_heatmap_as_a_durable_dag(self):
+        # The culmination: two real V1 tools cooperate as a durable DAG. compare:ani
+        # (FastANI) commits an ANI matrix; report:heatmap (matplotlib) reads that
+        # committed matrix, declares a DAG edge to the compare stage, and commits a
+        # figure -- real inter-stage data flow, durable and validated end to end.
+        store = ProjectStore.init(self.root / "pipe", FrozenClock("2026-07-20T00:00:00Z"))
+
+        store.register_run("compare-run", analysis_state="EXECUTION_PENDING")
+        ani = run_v1_step(
+            store,
+            run_id="compare-run",
+            subskill="compare",
+            action="ani",
+            flags={"--indir": str(GENOMES), "--out": "ani_matrix.tsv"},
+        )
+        self.assertTrue(ani.committed)
+        ani_matrix = v1_stage_workspace(store, "compare-run") / "ani_matrix.tsv"
+        self.assertTrue(ani_matrix.is_file())
+
+        store.register_run("report-run", analysis_state="EXECUTION_PENDING")
+        edge = DependencyHead(
+            "work", "stage:compare-run", ani.stage_committed_event.payload["object_head"]
+        )
+        report = run_v1_step(
+            store,
+            run_id="report-run",
+            subskill="report",
+            action="heatmap",
+            flags={"--input": str(ani_matrix), "--out": "heatmap"},
+            dependencies=(edge,),
+        )
+        self.assertTrue(report.committed)
+        # the figure was produced from the upstream stage's real output
+        figures = [
+            p
+            for p in v1_stage_workspace(store, "report-run").glob("heatmap.*")
+            if p.stat().st_size > 0
+        ]
+        self.assertTrue(figures)
+        # the report commit records the DAG edge to the compare stage
+        edges = report.stage_committed_event.payload["dependencies"]
+        self.assertEqual(edges[0]["object_id"], "stage:compare-run")
 
     @unittest.skipUnless(_HAS_PLOT_LIBS, "resolved python lacks pandas/matplotlib")
     def test_report_heatmap_runs_through_the_durable_engine_with_injected_env(self):
