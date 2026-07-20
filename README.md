@@ -32,6 +32,15 @@ LLM 驱动的比较基因组学分析有两处静默失效。其一，流程跑�
 
 ## 安装
 
+Claude Code 与 Codex 是 vivarium 的两个**平级支持端**，提供相同的六项工作流能力；用户可任选其一，也可在两端同时安装。差异仅在分发与更新机制。
+
+| | **Claude Code** | **Codex** |
+|---|---|---|
+| **推荐入口** | 插件市场 | `$skill-installer` |
+| **分发单元** | 一个 `vivarium` 插件，内含伞型技能与五个子技能 | 六个独立 skill 路径，包含伞型技能与五个子技能 |
+| **默认安装位置** | Claude Code 插件缓存（由插件管理器维护） | `$CODEX_HOME/skills`（默认 `~/.codex/skills`） |
+| **主要更新方式** | 刷新 marketplace 后执行 `/plugin update` | 重新同步六个路径，或对符号链接指向的本地仓库执行 `git pull` |
+
 ### Claude Code
 
 推荐通过插件市场安装，以便统一管理版本与更新。以下命令依次注册市场、安装插件并重新加载当前会话：
@@ -91,6 +100,8 @@ done
 ## 更新
 
 发布版本由 `.claude-plugin/plugin.json` 中的 `version` 字段标识，并遵循语义化版本约定；版本变更记录以根目录 [`CHANGELOG.md`](CHANGELOG.md) 为准。由于本插件采用显式版本号，每次正式发布均须递增该字段；仅向 `master` 推送代码而不更新版本号，不会触发已安装插件升级。
+
+Claude Code 与 Codex 对应同一套工作流契约和版本内容；下列步骤仅因两端的分发机制不同而分别列出。
 
 ### Claude Code
 

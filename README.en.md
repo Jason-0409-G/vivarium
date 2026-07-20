@@ -32,6 +32,15 @@ LLM-driven comparative-genomics analysis has two silent failure modes. First, a 
 
 ## Installation
 
+Claude Code and Codex are **peer-supported clients** for vivarium and expose the same six workflow capabilities. Users may install either client or both; only the distribution and update mechanisms differ.
+
+| | **Claude Code** | **Codex** |
+|---|---|---|
+| **Recommended entry point** | Plugin marketplace | `$skill-installer` |
+| **Distribution unit** | One `vivarium` plugin containing the umbrella skill and five sub-skills | Six independent skill paths comprising the umbrella skill and five sub-skills |
+| **Default installation location** | Claude Code plugin cache, managed by the plugin manager | `$CODEX_HOME/skills` (default: `~/.codex/skills`) |
+| **Primary update path** | Refresh the marketplace, then run `/plugin update` | Synchronize the six paths again, or run `git pull` in the local repository targeted by symlinks |
+
 ### Claude Code
 
 Installation through the plugin marketplace is recommended because it centralizes version and update management. The following commands register the marketplace, install the plugin, and reload the active session:
@@ -91,6 +100,8 @@ This method retains a single source checkout, so a subsequent `git pull` exposes
 ## Updating
 
 Release identity is defined by the `version` field in `.claude-plugin/plugin.json` and follows semantic-versioning conventions; the root [`CHANGELOG.md`](CHANGELOG.md) is the authoritative record of version-specific changes. Because this plugin uses an explicit version, every formal release must increment that field; pushing code to `master` without changing the version does not trigger an upgrade for installed copies.
+
+Claude Code and Codex expose the same workflow contracts and versioned content; the procedures below differ only because the two clients use different distribution mechanisms.
 
 ### Claude Code
 
