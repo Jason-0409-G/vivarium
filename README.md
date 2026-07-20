@@ -1,6 +1,6 @@
 <p align="center">
   <a href="docs/media/vivarium-v2-durable-loop-4k.png">
-    <img src="docs/media/vivarium-mechanism-clean.png" alt="Vivarium 2.0 比较基因组分析、证据校验与状态恢复机制图" width="100%">
+    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 持久化执行、证据校验与状态恢复机制图" width="100%">
   </a>
 </p>
 

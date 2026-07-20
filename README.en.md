@@ -1,6 +1,6 @@
 <p align="center">
   <a href="docs/media/vivarium-v2-durable-loop-4k.png">
-    <img src="docs/media/vivarium-mechanism-clean.png" alt="Vivarium 2.0 comparative-genomics execution, evidence validation, and recovery mechanism" width="100%">
+    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 durable execution, evidence validation, and state-recovery mechanism" width="100%">
   </a>
 </p>
 
