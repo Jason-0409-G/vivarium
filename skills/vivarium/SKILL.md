@@ -25,7 +25,8 @@ This skill coordinates; analysis implementations live in the sub-skills. Read th
 
 ## Select the execution mode
 
-- Use **V2 durable mode by default** for new complete workflows, or whenever the request mentions `2.0`, `durable`, `event ledger`, `crash recovery`, `C-1`, or `full`.
+- **Route by scale, not by habit.** The durable kernel earns its token and artifact overhead only past a threshold. Drive it (`plan`/`run`, `full`) when the project is long-running, accumulates more state than fits one context window, must survive a crash, or needs an auditable commit chain or cluster routing. For a one-shot analysis that fits comfortably in context (a single ANI, one tree, one figure, or a short chain), run the stage(s) directly via the sub-skills — cheaper, with no correctness penalty. Benchmark basis: on a context-sized task the kernel added tokens (≈ +25–96% across tiers) with no correctness or memory-drift gain; its value appears only once project state exceeds carryable context (earliest-fact recall was 8% self-managed vs 100% via the ledger). See `benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`.
+- Use **V2 durable mode** for new complete/`full` workflows once the scale test above says the kernel is warranted, or whenever the request mentions `2.0`, `durable`, `event ledger`, `crash recovery`, or `C-1`.
 - Use **V1 legacy mode only on explicit request**. Its `run_manifest.json` is a V1 coordination record, never the source of authority for a V2 run.
 - Do not silently mix V1 and V2 state within one run.
 

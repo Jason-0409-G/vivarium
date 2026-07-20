@@ -214,6 +214,17 @@ Version 2.0 does not rewrite the analysis scripts wholesale. It adds a durable c
 
 The complete migration design is documented in [`docs/V1_V2_INTEGRATION.zh-CN.md`](docs/V1_V2_INTEGRATION.zh-CN.md).
 
+### When to use the kernel (route by scale)
+
+The kernel's durability machinery carries a token and artifact cost that only pays off past a threshold. Per this repository's multi-model adversarial benchmark, the deciding question is **whether project state exceeds carryable context**, not how many stages there are:
+
+- **Single-step / one-shot / fits in context** (one ANI, one tree, one figure, or a short chain) → **invoke the corresponding sub-skill directly**, without driving the kernel. Cheapest, with no correctness penalty — when state fits, correctness and memory consistency are already saturated (1.0 at every tier) and the kernel only adds tokens (≈ +72% / +96% / +25% for Opus / Sonnet / Haiku), and can even regress the weakest model.
+- **Long-running / state exceeds one context / crash-sensitive / needs an auditable commit chain / cluster** → **drive the kernel** (`plan`/`run`, `full`). This is where the value appears: once project state exceeds carryable context, self-managed state collapses (earliest-fact recall 8%, even for the strongest model), while the ledger keeps 100% for the weakest model — memory integrity is a project-side property, not a model-side one.
+
+![Memory integrity vs. project scale — the crossover](docs/figures/benchmark_scale_crossover.png)
+
+The full capability ranking, the adversarially-verified hard guarantees (crash recovery, C-1 commit gate), and the honest anti-value are in [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md).
+
 ### Boundary with other workflow systems
 
 Snakemake and Nextflow provide more mature static DAGs, scheduler integration, and cluster-job lifecycle management. vivarium focuses on LLM-native goal interpretation, skill contracts, pre-commit evidence validation, and event-sourced state. These systems are not mutually exclusive: vivarium can generate auditable external commands or job scripts, but it does not currently submit or poll cluster jobs automatically.
@@ -261,6 +272,8 @@ The second benchmark used four real *Shewanella* genomes to compare the 2.0 dura
 | `correctness` | **1.00** | 0.98 |
 
 Both configurations recited the key values accurately in this task. The distinction lies in the mechanism rather than the observed score: the baseline relies on model context, whereas the durable loop reads from sealed artifacts. The 0.02 `correctness` difference reflects unreported fastANI minimizer jitter, a reporting-completeness issue rather than an incorrect biological classification.
+
+> Note (token accounting): the table above is single-run and directional. A subsequent three-tier (Opus / Sonnet / Haiku) multi-model adversarial benchmark found the durable loop consistently more expensive on context-sized small tasks (≈ +72% / +96% / +25%), with correctness and memory consistency saturated for both conditions; the ledger's benefit appears only once project state exceeds carryable context (see the 8% ↔ 100% crossover under "When to use the kernel" above). The full multi-model review and the adversarially-verified hard guarantees are in [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md).
 
 The data identify one same-species pair, *S. vesiculosa* M7 and PB002_L5, at approximately 98.5% ANI. The scoring prompt's expectation of no same-species pairing conflicts with the FASTA identifiers and the repository's existing analysis; the benchmark document records the supporting evidence.
 

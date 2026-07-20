@@ -214,6 +214,17 @@ PYTHONPATH=. python3 -m skills.vivarium.vivarium_v2.cli \
 
 完整迁移设计见 [`docs/V1_V2_INTEGRATION.zh-CN.md`](docs/V1_V2_INTEGRATION.zh-CN.md)。
 
+### 何时用内核（按规模决策）
+
+内核的持久化机制有 token 与产物开销，只在超过某个门槛后才回本。据本仓库的多模型对抗基准，判据是**项目状态是否超出可携带的上下文**，而非阶段多少：
+
+- **单步 / 一次性 / 装得进上下文**（一次 ANI、一棵树、一张图，或短链）→ **直接调用对应子技能**，不驱动内核。最省，且无正确性损失——装得下时正确性与记忆一致性均已饱和（各档位均 1.0），内核只带来 token 开销（Opus / Sonnet / Haiku 分别约 +72% / +96% / +25%），甚至可能拖累最弱模型。
+- **长流程 / 状态超出单个上下文 / 崩溃敏感 / 需可审计提交链 / 上集群** → **驱动内核**（`plan`/`run`，`full`）。价值在此兑现：当项目状态超出可携带上下文，自管理状态坍塌（最早事实召回率 8%，即便最强模型），而账本对最弱模型仍保持 100%——记忆完整性是项目端属性，不在模型端。
+
+![记忆完整性 vs 项目规模的交叉点](docs/figures/benchmark_scale_crossover.png)
+
+完整能力排名、经对抗验证的硬保证（崩溃恢复、C-1 提交闸门）与诚实反价值见 [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md)。
+
 ### 与其他工作流系统的边界
 
 Snakemake 与 Nextflow 提供更成熟的静态 DAG、调度器集成和集群作业生命周期管理。vivarium 的重点是 LLM 原生的目标解析、skill 契约、提交前证据校验和事件溯源状态。二者并非互斥：vivarium 可生成可审计的外部命令或作业脚本，但当前不会自动提交或轮询集群任务。
@@ -261,6 +272,8 @@ Snakemake 与 Nextflow 提供更成熟的静态 DAG、调度器集成和集群�
 | `correctness` | **1.00** | 0.98 |
 
 两组在本次任务中均准确复述关键数值。差异在机制而非该次分数：基线依赖模型上下文，durable loop 从已密封产物读回。`correctness` 的 0.02 差异来自 fastANI minimizer jitter 未在报告中说明，属于报告完整性问题而非生物学判定错误。
+
+> 注（token 口径）：上表为**单跑**方向性数据。随后的三档位（Opus / Sonnet / Haiku）多模型对抗基准发现，durable loop 在**装得进上下文的小任务**上一致更贵（约 +72% / +96% / +25%），且正确性与记忆一致性对两条件均饱和；账本的收益只在项目状态**超出**可携带上下文时才出现（见上文「何时用内核」的 8% ↔ 100% 交叉点）。完整多模型复核与经对抗验证的硬保证见 [`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md`](benchmark/AUTHORITATIVE_VERDICT.zh-CN.md)。
 
 本次数据识别出一个同种配对：*S. vesiculosa* M7 与 PB002_L5，ANI 约 98.5%。评分提示中“无同种配对”的预期与 FASTA 标识及仓库既有分析不一致，证据见基准文档。
 
