@@ -31,6 +31,7 @@ V1_SCRIPTS = {
     "search": _SKILLS / "vivarium-search" / "scripts" / "vivarium_search.sh",
 }
 REPORT_PY = _SKILLS / "vivarium-report" / "scripts" / "plot.py"
+INGEST_SCRIPT = _SKILLS / "vivarium" / "scripts" / "steps" / "ingest_outputs.py"
 
 # (subskill, action) -> declaration. mode 'inline' runs now if every tool is on
 # PATH; 'scaffold' always defers (heavy / long-running). tools=[] means a pure
@@ -127,4 +128,48 @@ def run_v1_step(
     )
 
 
-__all__ = ["run_v1_step", "v1_step_argv", "missing_tools", "V1StepNeedsScaffold", "ACTIONS"]
+def v1_stage_workspace(
+    store, run_id: str, stage_id: str = "stage-1", attempt_id: str = "attempt-1"
+) -> Path:
+    """Where the user drops a scaffolded stage's outputs before ingesting them."""
+    return (
+        Path(store.root)
+        / "runs" / run_id / "attempts" / stage_id / attempt_id / "workspace"
+    )
+
+
+def ingest_v1_step(
+    store,
+    *,
+    run_id: str,
+    expected_outputs: Sequence[str],
+    dependencies: Sequence[DependencyHead] = (),
+    stage_id: str = "stage-1",
+    attempt_id: str = "attempt-1",
+) -> StepCommit:
+    """Commit a scaffolded stage. The user has already run the heavy/uninstalled
+    tool and placed its outputs in v1_stage_workspace(...); this runs a
+    deterministic ingest process that verifies those outputs are present and
+    non-empty, then seals them as the stage's durable evidence."""
+    if not expected_outputs:
+        raise ValueError("ingest_v1_step requires the expected output names")
+    argv = [sys.executable, str(INGEST_SCRIPT), *expected_outputs]
+    return perform_one_step(
+        store,
+        run_id=run_id,
+        argv=argv,
+        dependencies=dependencies,
+        stage_id=stage_id,
+        attempt_id=attempt_id,
+    )
+
+
+__all__ = [
+    "run_v1_step",
+    "ingest_v1_step",
+    "v1_stage_workspace",
+    "v1_step_argv",
+    "missing_tools",
+    "V1StepNeedsScaffold",
+    "ACTIONS",
+]
