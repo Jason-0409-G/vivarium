@@ -7,6 +7,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f.svg?style=flat-square" alt="MIT license"></a>
   <a href="https://github.com/Jason-0409-G/vivarium/releases"><img src="https://img.shields.io/badge/release-v2.0.1-0969da.svg?style=flat-square" alt="release v2.0.1"></a>
+  <a href="https://jason-0409-g.github.io/vivarium/"><img src="https://img.shields.io/badge/website-online-0b7285.svg?style=flat-square" alt="project website"></a>
   <img src="https://img.shields.io/badge/clients-Claude_Code_%7C_Codex-24292f.svg?style=flat-square" alt="Claude Code and Codex">
   <img src="https://img.shields.io/badge/skills-6-0ea5e9.svg?style=flat-square" alt="6 skills">
   <img src="https://img.shields.io/badge/status-actively_maintained-2ea44f.svg?style=flat-square" alt="actively maintained">
@@ -14,6 +15,7 @@
 </p>
 
 <p align="center">
+  <a href="https://jason-0409-g.github.io/vivarium/">在线网站</a> ·
   <a href="#项目状态">项目状态</a> ·
   <a href="#安装">安装</a> ·
   <a href="#触发完整流程">快速开始</a> ·
