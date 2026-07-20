@@ -14,8 +14,6 @@ LLM-driven comparative-genomics analysis has two silent failure modes. First, a 
 
 **For:** PIs who need methodology-grade provenance and reproducibility; bioinformatics engineers who run long pipelines across laptop and cluster and require deterministic recovery after interruption; experimental biologists who want publication-grade figures.
 
-**Companion:** vivarium pairs with the paper-writing skill set [`scriptorium`](https://github.com/Jason-0409-G/scriptorium) (research-to-paper)—scriptorium turns research into papers, vivarium turns genomes into results.
-
 ---
 
 ## Project status

@@ -14,8 +14,6 @@ LLM 驱动的比较基因组学分析有两处静默失效。其一，流程跑�
 
 **面向：** 需要方法学级溯源与可复现性的 PI；要在本机与集群间跑长流程、且要求中断后确定性恢复的生信工程师；想要可发表级图表的实验生物学家。
 
-**配套：** vivarium 与论文写作技能集 [`scriptorium`](https://github.com/Jason-0409-G/scriptorium)（research-to-paper）互为搭档——scriptorium 将研究整理为论文，vivarium 将基因组转化为结果。
-
 ---
 
 ## 项目状态
