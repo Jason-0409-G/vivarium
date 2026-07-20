@@ -174,7 +174,11 @@ class LocalProcessHarness:
             boot_id,
             pid,
             process_group_id,
-            f"{boot_id}:{pid}:start",
+            # Logical, pid-free launch identity: deterministic across re-runs of the
+            # same stage on the same boot, so sealed cut/receipt digests reproduce.
+            # The ephemeral pid/process_group_id stay on the receipt (below) for
+            # runtime reaping; they are deliberately NOT part of any sealed digest.
+            f"{boot_id}:{intent.execution_intent_id}:start",
             _content_digest("vivarium-process-stdout/v1", stdout_bytes),
             _content_digest("vivarium-process-stderr/v1", stderr_bytes),
         )

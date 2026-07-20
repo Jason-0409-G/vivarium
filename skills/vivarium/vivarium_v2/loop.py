@@ -163,7 +163,17 @@ def perform_one_step(
     workspace = _attempt_dir(store, run_id, stage_id, attempt_id, "workspace")
     logs = _attempt_dir(store, run_id, stage_id, attempt_id, "execution_logs")
     payload_files = sorted(p for p in workspace.rglob("*") if p.is_file())
-    log_files = sorted(p for p in logs.rglob("*") if p.is_file())
+    # Exclude the raw process-receipt artifact from the sealed bundle: it is the
+    # only log file carrying the ephemeral OS pid / process_group_id (reaping
+    # handles, not evidence). Its evidential content is already sealed pid-free via
+    # the execution evidence cut (process_receipt_digest). Keeping it out of the
+    # bundle makes evidence_bundle_digest -> ... -> the committed STAGE_COMMITTED
+    # event reproduce byte-for-byte across independent runs of a deterministic
+    # stage. The file itself stays on disk for reconstruction (execution.py _read).
+    log_files = sorted(
+        p for p in logs.rglob("*")
+        if p.is_file() and not p.name.endswith(".process-receipt.json")
+    )
 
     # Run the validator hard gate BEFORE sealing any authority object or preparing
     # a commit: a step that classifies success but fails validation (e.g. exit 0

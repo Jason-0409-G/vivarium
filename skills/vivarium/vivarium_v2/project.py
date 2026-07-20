@@ -1536,6 +1536,17 @@ class ProjectStore:
                         analysis_state=events[0].payload["analysis_state"],
                         branch_id=events[0].payload["branch_id"],
                     )
+        # A torn tail of the work ledger may be a fully-committed STAGE_COMMITTED
+        # record (fsync'd before a later tear). Resuming commit intents against it is
+        # unsafe: _outcome() reads work.recover().events, which drops the quarantined
+        # record, so a committed tx is misread as un-committed and durably aborted --
+        # leaving both STAGE_COMMITTED and STAGE_COMMIT_ABORTED for one tx once the
+        # byte is repaired. Fail closed here (consistent with capture()), before any
+        # durable write, so the torn tail is resolved rather than silently aborted.
+        if self._project_ledger("work").recover().quarantined_tail:
+            raise IntegrityError(
+                "project work ledger has a torn tail; repair before recovery"
+            )
         for intent in self._transactions("COMMIT_INTENT"):
             prepared = self._with_prepare_authority(self._prepared_from_payload(intent.payload))
             prior_run_commit = any(

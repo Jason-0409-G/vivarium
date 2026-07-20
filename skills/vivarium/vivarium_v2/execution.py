@@ -135,13 +135,15 @@ class ProcessReceipt:
 
     @property
     def process_receipt_digest(self) -> str:
+        # The ephemeral OS pid / process_group_id are runtime reaping handles, not
+        # evidence: they are intentionally excluded from the sealed digest so that a
+        # deterministic stage re-run yields a byte-identical receipt (and cut) digest.
+        # Logical identity is carried by process_start_identity (boot + intent id).
         return domain_hash(
             "vivarium-process-receipt/v1",
             {
                 "execution_intent_id": self.execution_intent_id,
                 "boot_id": self.boot_id,
-                "pid": self.pid,
-                "process_group_id": self.process_group_id,
                 "process_start_identity": self.process_start_identity,
                 "stdout_digest": self.stdout_digest,
                 "stderr_digest": self.stderr_digest,
@@ -963,7 +965,7 @@ class LocalExecutionBroker:
             intent.stage_id,
             intent.attempt_id,
             "local_process",
-            f"{receipt.boot_id}:{receipt.pid}:{receipt.process_start_identity}",
+            f"{receipt.boot_id}:{receipt.process_start_identity}",
             terminal_refs,
             tuple(failure_flags),
             tuple(absence_evidence),
