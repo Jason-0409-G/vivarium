@@ -2,6 +2,18 @@
 
 本插件遵循[语义化版本](https://semver.org/lang/zh-CN/)（`MAJOR.MINOR.PATCH`），版本号写在 `.claude-plugin/plugin.json` 的 `version`。**用户只在版本号 bump 时收到更新**；更新方式见 [README「更新」一节](README.md#更新)。
 
+## [2.0.2] - 2026-07-20
+
+围绕 durable loop 的一轮代码级对抗测试发现并修复了两处真缺陷，并据多模型基准补充了"按规模决策"的使用判据。全套 205 测试通过。
+
+### 修复
+- **P1 崩溃恢复"既提交又中止"**：当 `ledgers/work.jsonl` 被撕裂的最后一行恰是一条已提交的 `STAGE_COMMITTED` 记录时，`recover()` 会既隔离它、又（非原子地）把同一事务判为 `STAGE_COMMIT_ABORTED`，修复该字节后同一 `commit_tx_id` 同时存在两种结果。现改为在 COMMIT_INTENT 恢复循环**之前**对 work 账本撕裂尾 fail-closed（与 `capture()` 一致），绝不先写 abort。经对抗验证：bug 消除、幂等、5 个 COMMIT_CRASH_POINT 零回归。
+- **P3 跨运行确定性**：OS `pid` 经四条通道（`process_start_identity`、`process_receipt_digest`、`process_or_job_ref`、以及扫入证据包的 `process-receipt.json` 构件）污染密封执行摘要，使确定性阶段两次独立运行的已提交事件不一致。现全部去 `pid`（`pid`/`process_group_id` 仍留在 receipt 供 `os.killpg` 回收）；确定性阶段重跑时，执行证据 cut 摘要、完成证明摘要、已提交 `evidence_bundle_digest` 与 `object_head` 均逐字节复现。
+
+### 新增
+- **按规模决策的使用判据**：`SKILL.md` 新增「Route by scale」——装得进上下文的单步/一次性分析直连子技能（最省、无正确性损失），仅在长流程/状态超出上下文/崩溃敏感/需可审计提交链/上集群时驱动内核。README（中英）新增「何时用内核」段，附规模交叉点图与硬证据。
+- **权威测试报告**：`benchmark/AUTHORITATIVE_VERDICT.zh-CN.md` 与两张可复现数据图（`docs/figures/benchmark_scale_crossover.*`、`benchmark_2x3_tokens.*`）——能力排名、经对抗验证的硬保证、以及诚实反价值（小任务上内核为净成本）。
+
 ## [2.0.1] - 2026-07-20
 
 ### 变更
