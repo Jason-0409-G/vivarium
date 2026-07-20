@@ -1,5 +1,12 @@
 # vivarium
 
+<p align="center">
+  <a href="docs/media/vivarium-v2-durable-loop-4k.png">
+    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 event-sourced, crash-safe, evidence-gated execution mechanism" width="100%">
+  </a>
+</p>
+<p align="center"><sub>Vivarium 2.0 durable loop: PLAN → ROUTE → EXECUTE → VALIDATE → C-1 COMMIT GATE → SEAL. Click for the 4K original.</sub></p>
+
 > **English** ｜ [中文](README.md)
 >
 > A durable analysis-execution system for local comparative genomics, delivered as a Claude Code skill set.

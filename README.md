@@ -1,5 +1,12 @@
 # vivarium
 
+<p align="center">
+  <a href="docs/media/vivarium-v2-durable-loop-4k.png">
+    <img src="docs/media/vivarium-v2-durable-loop-4k.png" alt="Vivarium 2.0 事件溯源、崩溃安全与证据闸门机制图" width="100%">
+  </a>
+</p>
+<p align="center"><sub>Vivarium 2.0 durable loop：PLAN → ROUTE → EXECUTE → VALIDATE → C-1 COMMIT GATE → SEAL；点击查看 4K 原图。</sub></p>
+
 > [English](README.en.md) ｜ **中文**
 >
 > 面向本地比较基因组学的持久化分析执行系统，以 Claude Code 技能集形式交付。
